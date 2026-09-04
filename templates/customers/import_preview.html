@@ -98,13 +98,13 @@
                             <td class="text-muted">{{ forloop.counter }}</td>
                             <td class="font-medium">{{ row.company_name }}</td>
                             <td>{{ row.trade_license_number|default:"-" }}</td>
-                            <td>{{ row.trade_license_expiry|date:"d/m/Y"|default:"-" }}</td>
+                            <td>{{ row.trade_license_expiry|default:"-" }}</td>
                             <td>{{ row.passport_number|default:"-" }}</td>
-                            <td>{{ row.passport_expiry|date:"d/m/Y"|default:"-" }}</td>
+                            <td>{{ row.passport_expiry|default:"-" }}</td>
                             <td>{{ row.eid_number|default:"-" }}</td>
-                            <td>{{ row.eid_expiry|date:"d/m/Y"|default:"-" }}</td>
+                            <td>{{ row.eid_expiry|default:"-" }}</td>
                             <td>{{ row.trn|default:"-" }}</td>
-                            <td>{{ row.sales_person.name|default:"-" }}</td>
+                            <td>{{ row.sales_person_name|default:"-" }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -125,7 +125,7 @@
                 </a>
                 <button type="submit" name="confirm" value="1" class="btn btn-primary">
                     <i data-feather="check" class="w-4 h-4"></i>
-                    {% trans "Import {{ preview.valid_rows|length }} Records" %}
+                    {% blocktrans with count=preview.valid_rows|length %}Import {{ count }} Records{% endblocktrans %}
                 </button>
             </form>
         </div>

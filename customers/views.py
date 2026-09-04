@@ -3,7 +3,7 @@ Views for customers app.
 """
 
 import csv
-from datetime import date
+from datetime import date, datetime
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Q, Count, Prefetch
@@ -496,6 +496,7 @@ class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
         valid_rows = []
         errors = []
         duplicates = 0
+        row_count = 0
         seen_names = set()      # Track within-file duplicates
         seen_licenses = set()
         seen_trns = set()
@@ -503,7 +504,8 @@ class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
             if not any(row):
                 continue
-            
+            row_count += 1
+
             try:
                 company_name = str(row[col_indices.get('company_name', 0)] or '').strip()
                 if not company_name:
@@ -549,12 +551,14 @@ class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
                 def parse_date(val):
                     if not val:
                         return None
+                    if isinstance(val, datetime):
+                        return val.date()
                     if isinstance(val, date):
                         return val
                     if isinstance(val, str):
                         for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d'):
                             try:
-                                return date.strptime(val.strip(), fmt)
+                                return datetime.strptime(val.strip(), fmt).date()
                             except ValueError:
                                 continue
                     return None
@@ -575,16 +579,15 @@ class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
                 valid_rows.append({
                     'company_name': company_name,
                     'trade_license_number': trade_license or None,
-                    'trade_license_expiry': trade_license_expiry,
+                    'trade_license_expiry': trade_license_expiry.isoformat() if trade_license_expiry else None,
                     'passport_number': str(row[col_indices.get('passport_number')] or '').strip() if 'passport_number' in col_indices else '',
-                    'passport_expiry': passport_expiry,
+                    'passport_expiry': passport_expiry.isoformat() if passport_expiry else None,
                     'eid_number': str(row[col_indices.get('eid_number')] or '').strip() if 'eid_number' in col_indices else '',
-                    'eid_expiry': eid_expiry,
+                    'eid_expiry': eid_expiry.isoformat() if eid_expiry else None,
                     'trn': trn or None,
-                    'sales_person': sales_person,
+                    'sales_person_pk': sales_person.pk if sales_person else None,
+                    'sales_person_name': sales_person.name if sales_person else '',
                     'customer_status': Customer.CustomerStatus.ACTIVE,
-                    'created_by': request.user,
-                    'updated_by': request.user,
                 })
                 
             except Exception as e:
@@ -595,7 +598,7 @@ class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
             'valid_rows': valid_rows,
             'errors': errors,
             'duplicates': duplicates,
-            'total_rows': len(valid_rows) + duplicates + len(errors),
+            'total_rows': row_count,
         }
         
         return redirect('customers:import_preview')
@@ -629,7 +632,22 @@ class CustomerImportPreviewView(LoginRequiredMixin, UserPassesTestMixin, View):
         created_count = 0
         for row_data in preview['valid_rows']:
             try:
-                customer = Customer.objects.create(**row_data)
+                # Rebuild values from the JSON-safe data stored in the session
+                data = {
+                    'company_name': row_data['company_name'],
+                    'trade_license_number': row_data.get('trade_license_number') or None,
+                    'trade_license_expiry': date.fromisoformat(row_data['trade_license_expiry']) if row_data.get('trade_license_expiry') else None,
+                    'passport_number': row_data.get('passport_number') or '',
+                    'passport_expiry': date.fromisoformat(row_data['passport_expiry']) if row_data.get('passport_expiry') else None,
+                    'eid_number': row_data.get('eid_number') or '',
+                    'eid_expiry': date.fromisoformat(row_data['eid_expiry']) if row_data.get('eid_expiry') else None,
+                    'trn': row_data.get('trn') or None,
+                    'sales_person': SalesPerson.objects.filter(pk=row_data.get('sales_person_pk')).first() if row_data.get('sales_person_pk') else None,
+                    'customer_status': row_data.get('customer_status', Customer.CustomerStatus.ACTIVE),
+                    'created_by': request.user,
+                    'updated_by': request.user,
+                }
+                customer = Customer.objects.create(**data)
                 customer.update_copy_status()
                 log_action(
                     user=request.user,

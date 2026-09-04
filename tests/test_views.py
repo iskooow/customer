@@ -1468,3 +1468,158 @@ class TestReportExcelExports(TestCase):
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             response['Content-Type'],
         )
+
+@pytest.mark.django_db
+class TestCustomerExcelImport(TestCase):
+    """Regression tests for the Excel import flow (customers/import)."""
+
+    def setUp(self):
+        self.admin_user = User.objects.create_user(
+            email='admin@example.com',
+            username='admin',
+            password='admin123',
+            role=User.Role.ADMIN,
+        )
+        self.sales_person = SalesPerson.objects.create(
+            name='Import Sales',
+            email='import@example.com',
+            phone='+971 50 000 0000',
+        )
+
+    def _make_xlsx(self, rows):
+        """Return .xlsx bytes with the importer's expected headers and rows."""
+        import io
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append([
+            'S.N', 'COMPANY NAME', 'TRADE LICENSE', 'EXPIRE DATE',
+            'PASSPORT', 'PASSPORT EXPIRY', 'EID', 'EID EXPIRY',
+            'TRN', 'SALES PERSON',
+        ])
+        for row in rows:
+            ws.append(row)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    def _upload(self, xlsx_bytes, filename='import.xlsx'):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        upload = SimpleUploadedFile(
+            filename,
+            xlsx_bytes,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        return self.client.post(reverse('customers:import'), {'excel_file': upload})
+
+    def test_upload_preview_and_confirm_import(self):
+        """Regression: string dates must parse, preview shows rows, confirm creates customers.
+        Previously 'date.strptime' did not exist, so valid_rows was always empty."""
+        self.client.login(email='admin@example.com', password='admin123')
+        xlsx = self._make_xlsx([
+            [1, 'Import Co A LLC', 'TL-A1', '2026-12-31',
+             'PP-A1', '2026-06-30', 'EID-A1', '2026-09-30', 'TRN-A1', 'Import Sales'],
+            [2, 'Import Co B LLC', 'TL-B1', None,
+             'PP-B1', None, 'EID-B1', None, 'TRN-B1', ''],
+        ])
+
+        resp = self._upload(xlsx)
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse('customers:import_preview'))
+
+        # Preview page shows both valid rows and the record-count label
+        preview = self.client.get(reverse('customers:import_preview'))
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, 'Import Co A LLC')
+        self.assertContains(preview, 'Import Co B LLC')
+        self.assertContains(preview, 'Import 2 Records')
+
+        # Confirm the import
+        confirm = self.client.post(
+            reverse('customers:import_preview'), {'confirm': '1'},
+        )
+        self.assertEqual(confirm.status_code, 302)
+        self.assertEqual(confirm.url, reverse('customers:list'))
+
+        customer = Customer.objects.get(company_name='Import Co A LLC')
+        self.assertEqual(customer.trade_license_expiry, date(2026, 12, 31))
+        self.assertEqual(customer.passport_expiry, date(2026, 6, 30))
+        self.assertEqual(customer.eid_expiry, date(2026, 9, 30))
+        self.assertEqual(customer.trn, 'TRN-A1')
+        self.assertEqual(customer.sales_person, self.sales_person)
+        self.assertEqual(customer.created_by, self.admin_user)
+        self.assertEqual(customer.customer_status, Customer.CustomerStatus.ACTIVE)
+
+        customer_b = Customer.objects.get(company_name='Import Co B LLC')
+        self.assertIsNone(customer_b.trade_license_expiry)
+        self.assertIsNone(customer_b.sales_person)
+
+    def test_import_with_excel_date_cells(self):
+        """Regression: openpyxl yields datetime objects for real Excel date cells."""
+        from datetime import datetime
+
+        self.client.login(email='admin@example.com', password='admin123')
+        xlsx = self._make_xlsx([
+            [1, 'Import Co C LLC', 'TL-C1', datetime(2026, 12, 31),
+             'PP-C1', datetime(2026, 6, 30), 'EID-C1', datetime(2026, 9, 30),
+             'TRN-C1', 'Import Sales'],
+        ])
+
+        resp = self._upload(xlsx)
+        self.assertEqual(resp.status_code, 302)
+
+        preview = self.client.get(reverse('customers:import_preview'))
+        self.assertContains(preview, 'Import Co C LLC')
+        self.assertContains(preview, '2026-12-31')
+
+        self.client.post(reverse('customers:import_preview'), {'confirm': '1'})
+        customer = Customer.objects.get(company_name='Import Co C LLC')
+        self.assertEqual(customer.trade_license_expiry, date(2026, 12, 31))
+        self.assertEqual(customer.passport_expiry, date(2026, 6, 30))
+
+    def test_rejects_old_xls_files(self):
+        """Only .xlsx is supported (openpyxl cannot read the legacy .xls format)."""
+        self.client.login(email='admin@example.com', password='admin123')
+        xlsx = self._make_xlsx([
+            [1, 'Import Co D LLC', 'TL-D1', '2026-12-31',
+             'PP-D1', '2026-06-30', 'EID-D1', '2026-09-30', 'TRN-D1', ''],
+        ])
+        resp = self._upload(xlsx, filename='customers.xls')
+        self.assertEqual(resp.status_code, 200)  # form re-rendered with error
+        self.assertContains(resp, 'File must be an Excel file (.xlsx).')
+        self.assertFalse(
+            Customer.objects.filter(company_name='Import Co D LLC').exists()
+        )
+
+    def test_duplicate_rows_are_reported_once(self):
+        """A duplicate company in the DB is skipped and counted once."""
+        self.client.login(email='admin@example.com', password='admin123')
+        Customer.objects.create(
+            company_name='Existing Co LLC',
+            created_by=self.admin_user,
+            updated_by=self.admin_user,
+        )
+        xlsx = self._make_xlsx([
+            [1, 'Existing Co LLC', 'TL-E1', '2026-12-31',
+             'PP-E1', '2026-06-30', 'EID-E1', '2026-09-30', 'TRN-E1', ''],
+            [2, 'Fresh Co LLC', 'TL-E2', '2026-12-31',
+             'PP-E2', '2026-06-30', 'EID-E2', '2026-09-30', 'TRN-E2', ''],
+        ])
+
+        resp = self._upload(xlsx)
+        self.assertEqual(resp.status_code, 302)
+
+        preview = self.client.get(reverse('customers:import_preview'))
+        self.assertContains(preview, 'Fresh Co LLC')
+        self.assertContains(preview, 'Duplicate company name')
+
+        self.client.post(reverse('customers:import_preview'), {'confirm': '1'})
+        # Only the fresh company is created; the existing one is untouched.
+        self.assertEqual(
+            Customer.objects.filter(company_name='Fresh Co LLC').count(), 1
+        )
+        self.assertEqual(
+            Customer.objects.filter(company_name='Existing Co LLC').count(), 1
+        )

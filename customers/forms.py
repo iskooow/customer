@@ -247,14 +247,14 @@ class CustomerImportForm(forms.Form):
         help_text=_('Upload an Excel file (.xlsx) with customer data.'),
         widget=forms.FileInput(attrs={
             'class': 'form-input',
-            'accept': '.xlsx,.xls',
+            'accept': '.xlsx',
         })
     )
     
     def clean_excel_file(self):
         file = self.cleaned_data['excel_file']
-        if not file.name.endswith(('.xlsx', '.xls')):
-            raise forms.ValidationError(_('File must be an Excel file (.xlsx or .xls).'))
+        if not file.name.lower().endswith('.xlsx'):
+            raise forms.ValidationError(_('File must be an Excel file (.xlsx).'))
         if file.size > 10 * 1024 * 1024:  # 10MB
             raise forms.ValidationError(_('File size must be less than 10MB.'))
         return file
