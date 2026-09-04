@@ -1,0 +1,94 @@
+{% load i18n %}
+
+<tr hx-get="{% url 'customers:row_partial' customer.pk %}" hx-trigger="refresh-customer" hx-swap="outerHTML">
+    <td class="text-muted font-mono">{{ forloop.counter }}</td>
+    <td class="font-medium text-ink max-w-xs truncate" title="{{ customer.company_name }}">
+        <a href="{% url 'customers:detail' customer.pk %}" class="text-ink hover:text-accent transition-colors duration-short">{{ customer.company_name }}</a>
+    </td>
+    <td class="font-mono text-sm">{{ customer.trade_license_number|default:"-" }}</td>
+    <td class="whitespace-nowrap">{{ customer.trade_license_expiry|date:"d/m/Y"|default:"-" }}</td>
+    <td class="num">
+        {% if tl_days_left is not None %}
+            {% if tl_days_left < 0 %}
+                <span class="badge badge-danger">{% trans "EXPIRED" %}</span>
+            {% elif tl_days_left <= 7 %}
+                <span class="badge badge-danger font-mono">{{ tl_days_left }} {% trans "Days" %}</span>
+            {% elif tl_days_left <= 30 %}
+                <span class="badge badge-warning font-mono">{{ tl_days_left }} {% trans "Days" %}</span>
+            {% elif tl_days_left <= 60 %}
+                <span class="badge badge-warning font-mono">{{ tl_days_left }} {% trans "Days" %}</span>
+            {% else %}
+                <span class="badge badge-success font-mono">{{ tl_days_left }} {% trans "Days" %}</span>
+            {% endif %}
+        {% else %}
+            <span class="text-muted">-</span>
+        {% endif %}
+    </td>
+    <td class="font-mono text-sm">{{ customer.passport_number|default:"-" }}</td>
+    <td class="whitespace-nowrap">{{ customer.passport_expiry|date:"d/m/Y"|default:"-" }}</td>
+    <td class="font-mono text-sm">{{ customer.eid_number|default:"-" }}</td>
+    <td class="whitespace-nowrap">{{ customer.eid_expiry|date:"d/m/Y"|default:"-" }}</td>
+    <td class="num">
+        {% if eid_days_left is not None %}
+            {% if eid_days_left < 0 %}
+                <span class="badge badge-danger">{% trans "EXPIRED" %}</span>
+            {% elif eid_days_left <= 7 %}
+                <span class="badge badge-danger font-mono">{{ eid_days_left }} {% trans "Days" %}</span>
+            {% elif eid_days_left <= 30 %}
+                <span class="badge badge-warning font-mono">{{ eid_days_left }} {% trans "Days" %}</span>
+            {% elif eid_days_left <= 60 %}
+                <span class="badge badge-warning font-mono">{{ eid_days_left }} {% trans "Days" %}</span>
+            {% else %}
+                <span class="badge badge-success font-mono">{{ eid_days_left }} {% trans "Days" %}</span>
+            {% endif %}
+        {% else %}
+            <span class="text-muted">-</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if customer.copy_status == 'complete' %}
+            <span class="badge badge-success"><i data-feather="check" class="w-3 h-3"></i> {% trans "Complete" %}</span>
+        {% elif customer.copy_status == 'partial' %}
+            <span class="badge badge-warning"><i data-feather="alert-triangle" class="w-3 h-3"></i> {% trans "Partial" %}</span>
+        {% else %}
+            <span class="badge badge-danger"><i data-feather="x" class="w-3 h-3"></i> {% trans "Missing" %}</span>
+        {% endif %}
+    </td>
+    <td class="font-mono text-sm">{{ customer.trn|default:"-" }}</td>
+    <td>
+        {% if cheque %}
+            <span class="badge 
+                {% if cheque.status == 'received' %}badge-success
+                {% elif cheque.status == 'pending' %}badge-warning
+                {% elif cheque.status == 'returned' %}badge-info
+                {% else %}badge-danger{% endif %}">
+                {{ cheque.get_status_display }}
+            </span>
+        {% else %}
+            <span class="badge badge-gray">{% trans "Not Received" %}</span>
+        {% endif %}
+    </td>
+    <td>{{ customer.sales_person.name|default:"-" }}</td>
+    <td>
+        <div class="flex items-center justify-end gap-1">
+            <a href="{% url 'customers:detail' customer.pk %}" class="icon-btn" title="{% trans 'View' %}" aria-label="{% trans 'View' %}">
+                <i data-feather="eye" class="w-4 h-4"></i>
+            </a>
+            {% if user.is_admin_user %}
+                <a href="{% url 'customers:edit' customer.pk %}" class="icon-btn" title="{% trans 'Edit' %}" aria-label="{% trans 'Edit' %}">
+                    <i data-feather="edit" class="w-4 h-4"></i>
+                </a>
+            {% elif user.is_sales_person_user and customer.sales_person == user.sales_person %}
+                <a href="{% url 'customers:edit' customer.pk %}" class="icon-btn" title="{% trans 'Edit' %}" aria-label="{% trans 'Edit' %}">
+                    <i data-feather="edit" class="w-4 h-4"></i>
+                </a>
+            {% endif %}
+            {% if user.is_admin_user %}
+                <a href="{% url 'customers:delete' customer.pk %}" class="icon-btn-danger" title="{% trans 'Delete' %}" aria-label="{% trans 'Delete' %}"
+                   onclick="return confirm('{% trans 'Are you sure you want to delete this customer? This action cannot be undone.' %}')">
+                    <i data-feather="trash-2" class="w-4 h-4"></i>
+                </a>
+            {% endif %}
+        </div>
+    </td>
+</tr>

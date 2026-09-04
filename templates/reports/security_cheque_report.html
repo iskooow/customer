@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load custom_filters %}
+
+{% block title %}{% trans "Security Cheque Report" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Reports" %} / {% trans "Cheques" %}</p>
+            <h1 class="page-title">{% trans "Security Cheque Report" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Total:" %} <span class="font-mono font-semibold">{{ total_count }}</span> {% trans "cheques" %}</p>
+        </div>
+        <div class="page-actions">
+            <a href="?format=excel{% for k, v in request.GET.items %}{% if k != 'format' %}&{{ k }}={{ v|urlencode }}{% endif %}{% endfor %}" class="btn btn-success">
+                <i data-feather="download" class="w-4 h-4"></i>
+                {% trans "Export Excel" %}
+            </a>
+            <a href="?format=pdf{% for k, v in request.GET.items %}{% if k != 'format' %}&{{ k }}={{ v|urlencode }}{% endif %}{% endfor %}" class="btn btn-secondary">
+                <i data-feather="file" class="w-4 h-4"></i>
+                {% trans "Export PDF" %}
+            </a>
+            <button onclick="window.print()" class="btn btn-secondary">
+                <i data-feather="printer" class="w-4 h-4"></i>
+                {% trans "Print" %}
+            </button>
+        </div>
+    </div>
+    
+    <!-- Status Summary -->
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-success">{{ page_obj.object_list|filter_status:'received'|length }}</p>
+                <p class="text-sm text-muted">{% trans "Received" %}</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-warning">{{ page_obj.object_list|filter_status:'pending'|length }}</p>
+                <p class="text-sm text-muted">{% trans "Pending" %}</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-danger">{{ page_obj.object_list|filter_status:'not_received'|length }}</p>
+                <p class="text-sm text-muted">{% trans "Not Received" %}</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-info">{{ page_obj.object_list|filter_status:'returned'|length }}</p>
+                <p class="text-sm text-muted">{% trans "Returned" %}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filter -->
+    <div class="card">
+        <div class="card-body">
+            <span id="filter-spinner" class="htmx-indicator"></span>
+            <form method="get" hx-get="{% url 'reports:cheque_report' %}" hx-target="#cheques-table" hx-indicator="#filter-spinner" class="flex flex-col sm:flex-row gap-4">
+                <div class="min-w-[200px]">
+                    <label class="form-label">{% trans "Status" %}</label>
+                    <select name="status" class="form-select" hx-get="{% url 'reports:cheque_report' %}" hx-trigger="change" hx-target="#cheques-table" hx-indicator="#filter-spinner">
+                        <option value="">{% trans "All Statuses" %}</option>
+                        {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex-1 min-w-[250px]">
+                    <label class="form-label">{% trans "Search" %}</label>
+                    <div class="relative">
+                        <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-rule2"></i>
+                        <input type="search" name="search" value="{{ search|default:'' }}" placeholder="{% trans 'Search by company, cheque number...' %}" class="form-input pl-10 pr-10"
+                               hx-get="{% url 'reports:cheque_report' %}"
+                               hx-trigger="keyup changed delay:300ms"
+                               hx-target="#cheques-table"
+                               hx-indicator="#search-spinner">
+                        <span id="search-spinner" class="htmx-indicator absolute right-3 top-1/2 -translate-y-1/2 hidden"></span>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Table -->
+    <div class="card" id="cheques-table">
+        {% include 'reports/partials/cheque_table.html' %}
+    </div>
+</div>
+{% endblock %}

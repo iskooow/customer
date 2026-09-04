@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Delete Security Cheque" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h1 class="text-lg font-semibold text-ink">{% trans "Delete Security Cheque" %}</h1>
+        </div>
+        <div class="card-body">
+            <div class="text-center py-4">
+                <i data-feather="alert-triangle" class="w-16 h-16 text-danger mx-auto mb-4"></i>
+                <h2 class="text-xl font-semibold text-ink mb-2">{% trans 'Are you sure?' %}</h2>
+                <p class="text-ink-2 mb-4">
+                    {% blocktrans with name=cheque.get_status_display customer=cheque.customer.company_name %}
+                    Are you sure you want to delete the <strong>"{{ name }}"</strong> security cheque for <strong>"{{ customer }}"</strong>?
+                    {% endblocktrans %}
+                </p>
+                <p class="text-danger text-sm mb-6">
+                    {% trans "This action cannot be undone." %}
+                </p>
+                
+                <form method="post" class="flex space-x-3 justify-center">
+                    {% csrf_token %}
+                    <a href="{% url 'customers:detail' cheque.customer.pk %}" class="btn btn-secondary">
+                        <i data-feather="x" class="w-4 h-4"></i>
+                        {% trans "Cancel" %}
+                    </a>
+                    <button type="submit" class="btn btn-danger">
+                        <i data-feather="trash-2" class="w-4 h-4"></i>
+                        {% trans "Delete" %}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

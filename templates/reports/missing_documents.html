@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load custom_filters %}
+
+{% block title %}{% trans "Missing Documents Report" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Reports" %} / {% trans "Compliance" %}</p>
+            <h1 class="page-title">{% trans "Missing Documents Report" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Total:" %} <span class="font-mono font-semibold">{{ total_count }}</span> {% trans "customers missing required documents" %}</p>
+        </div>
+        <div class="page-actions">
+            <a href="?format=excel{% for k, v in request.GET.items %}{% if k != 'format' %}&{{ k }}={{ v|urlencode }}{% endif %}{% endfor %}" class="btn btn-success">
+                <i data-feather="download" class="w-4 h-4"></i>
+                {% trans "Export Excel" %}
+            </a>
+            <a href="?format=pdf{% for k, v in request.GET.items %}{% if k != 'format' %}&{{ k }}={{ v|urlencode }}{% endif %}{% endfor %}" class="btn btn-secondary">
+                <i data-feather="file" class="w-4 h-4"></i>
+                {% trans "Export PDF" %}
+            </a>
+            <button onclick="window.print()" class="btn btn-secondary">
+                <i data-feather="printer" class="w-4 h-4"></i>
+                {% trans "Print" %}
+            </button>
+        </div>
+    </div>
+    
+    <!-- Salesperson Filter -->
+    <div class="card">
+        <div class="card-body px-6 py-3">
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="text-sm text-muted mr-1">{% trans "Sales Person:" %}</span>
+                <a href="{% url 'reports:missing_documents' %}" class="btn {% if not sales_person_id %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                    {% trans "All" %}
+                </a>
+                {% for sp in sales_persons %}
+                <a href="{% url 'reports:missing_documents' %}?sales_person={{ sp.pk }}" class="btn {% if sales_person_id == sp.pk|stringformat:'s' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                    {{ sp.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table" style="min-width: 1000px;">
+                    <thead>
+                        <tr>
+                            <th class="w-12">{% trans "S.N" %}</th>
+                            <th class="min-w-[200px]">{% trans "Company" %}</th>
+                            <th>{% trans "Missing Documents" %}</th>
+                            <th>{% trans "Trade License" %}</th>
+                            <th>{% trans "Passport" %}</th>
+                            <th>{% trans "Emirates ID" %}</th>
+                            <th>{% trans "TRN Certificate" %}</th>
+                            <th>{% trans "Copy Status" %}</th>
+                            <th class="hidden md:table-cell">{% trans "Sales Person" %}</th>
+                            <th>{% trans "Action" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for customer in page_obj %}
+                        <tr>
+                            <td class="text-muted font-mono">{{ forloop.counter }}</td>
+                            <td class="font-medium">{{ customer.company_name }}</td>
+                            <td>
+                                <div class="flex flex-wrap gap-1">
+                                    {% if not customer.documents.filter|document_type:"trade_license"|exists %}
+                                        <span class="badge badge-danger">{% trans "Trade License" %}</span>
+                                    {% endif %}
+                                    {% if not customer.documents.filter|document_type:"passport"|exists %}
+                                        <span class="badge badge-danger">{% trans "Passport" %}</span>
+                                    {% endif %}
+                                    {% if not customer.documents.filter|document_type:"emirates_id"|exists %}
+                                        <span class="badge badge-danger">{% trans "Emirates ID" %}</span>
+                                    {% endif %}
+                                    {% if not customer.documents.filter|document_type:"trn_certificate"|exists %}
+                                        <span class="badge badge-danger">{% trans "TRN Certificate" %}</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                {% if customer.documents.filter|document_type:"trade_license"|exists %}
+                                    <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                                {% else %}
+                                    <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if customer.documents.filter|document_type:"passport"|exists %}
+                                    <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                                {% else %}
+                                    <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if customer.documents.filter|document_type:"emirates_id"|exists %}
+                                    <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                                {% else %}
+                                    <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if customer.documents.filter|document_type:"trn_certificate"|exists %}
+                                    <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                                {% else %}
+                                    <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if customer.copy_status == 'complete' %}<span class="badge badge-success">{% trans "Complete" %}</span>
+                                {% elif customer.copy_status == 'partial' %}<span class="badge badge-warning">{% trans "Partial" %}</span>
+                                {% else %}<span class="badge badge-danger">{% trans "Missing" %}</span>{% endif %}
+                            </td>
+                            <td class="hidden md:table-cell">{{ customer.sales_person.name|default:"-" }}</td>
+                            <td>
+                                <a href="{% url 'customers:detail' customer.pk %}" class="text-accent hover:text-accent text-sm font-medium">
+                                    {% trans "View" %}
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-12">
+                                <i data-feather="check-circle" class="w-16 h-16 mx-auto text-success mb-4"></i>
+                                <p class="text-muted">{% trans "All customers have complete documents" %}</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-muted">
+                {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ total_count }} {% trans "customers" %}
+            </div>
+            <div class="flex space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% if sales_person_id %}&sales_person={{ sales_person_id }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if sales_person_id %}&sales_person={{ sales_person_id }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+                {% endif %}
+                <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if sales_person_id %}&sales_person={{ sales_person_id }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}{% if sales_person_id %}&sales_person={{ sales_person_id }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

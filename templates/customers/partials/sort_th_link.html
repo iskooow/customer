@@ -1,0 +1,17 @@
+{% load i18n %}
+{% comment %}
+Render the sorted <th> link. Context: field_name, label, new_sort, active, ascending, s.
+{% endcomment %}
+<th class="min-w-[150px]">
+    <a href="?sort={{ new_sort }}{% for key, value in request.GET.items %}{% if key != 'sort' and key != 'page' %}&amp;{{ key }}={{ value }}{% endif %}{% endfor %}"
+       hx-get="{% url 'customers:list' %}?sort={{ new_sort }}{% for key, value in request.GET.items %}{% if key != 'sort' and key != 'page' %}&amp;{{ key }}={{ value }}{% endif %}{% endfor %}"
+       hx-target="#customer-table"
+       hx-indicator="#filter-spinner"
+       class="inline-flex items-center gap-1 no-underline {% if active %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}"
+       {% if not active %}aria-sort="none"{% elif ascending %}aria-sort="ascending"{% else %}aria-sort="descending"{% endif %}>
+        {{ label }}
+        {% if active %}
+            <i data-feather="{% if ascending %}chevron-up{% else %}chevron-down{% endif %}" class="w-3 h-3"></i>
+        {% endif %}
+    </a>
+</th>

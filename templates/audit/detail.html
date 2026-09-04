@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Audit Log Detail" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Activity" %} / {% trans "Detail" %}</p>
+            <h1 class="page-title">{% trans "Audit Log Detail" %}</h1>
+            <p class="page-subtitle mt-1">{{ log.get_action_display }} - {{ log.timestamp|date:"d M Y H:i" }}</p>
+        </div>
+        <a href="{% url 'audit:list' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back to List" %}
+        </a>
+    </div>
+    
+    <!-- Log Details -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-lg font-semibold text-ink">{% trans "Log Information" %}</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                    <dt class="text-sm text-muted">{% trans "Action" %}</dt>
+                    <dd class="mt-1">
+                        <span class="badge badge-gray">{{ log.get_action_display }}</span>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-sm text-muted">{% trans "Timestamp" %}</dt>
+                    <dd class="mt-1 font-medium">{{ log.timestamp|date:"d M Y H:i:s" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm text-muted">{% trans "User" %}</dt>
+                    <dd class="mt-1">
+                        {% if log.user %}
+                            <a href="#" class="font-medium text-accent hover:text-accent">
+                                {{ log.user.get_full_name|default:log.user.email }}
+                            </a>
+                            <div class="text-sm text-muted">{{ log.user.get_role_display }}</div>
+                        {% else %}
+                            <span class="text-rule2">{% trans "System" %}</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-sm text-muted">{% trans "IP Address" %}</dt>
+                    <dd class="mt-1 font-mono">{{ log.ip_address|default:"—" }}</dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-sm text-muted">{% trans "Customer" %}</dt>
+                    <dd class="mt-1">
+                        {% if log.customer %}
+                            <a href="{% url 'customers:detail' log.customer.pk %}" class="font-medium text-accent hover:text-accent">
+                                {{ log.customer.company_name }}
+                            </a>
+                        {% else %}
+                            <span class="text-rule2">—</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-sm text-muted">{% trans "Description" %}</dt>
+                    <dd class="mt-1 text-ink-2">{{ log.description }}</dd>
+                </div>
+                {% if log.object_type %}
+                <div>
+                    <dt class="text-sm text-muted">{% trans "Object Type" %}</dt>
+                    <dd class="mt-1 font-mono">{{ log.object_type }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm text-muted">{% trans "Object ID" %}</dt>
+                    <dd class="mt-1 font-mono">{{ log.object_id|default:"—" }}</dd>
+                </div>
+                {% endif %}
+                {% if log.changes %}
+                <div class="sm:col-span-2">
+                    <dt class="text-sm text-muted">{% trans "Changes" %}</dt>
+                    <dd class="mt-1">
+                        <pre class="bg-paper2 p-3 rounded-lg text-sm overflow-x-auto">{{ log.changes|pprint }}</pre>
+                    </dd>
+                </div>
+                {% endif %}
+                <div class="sm:col-span-2">
+                    <dt class="text-sm text-muted">{% trans "User Agent" %}</dt>
+                    <dd class="mt-1 font-mono text-xs text-muted">{{ log.user_agent|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+    
+    {% if log.customer %}
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-lg font-semibold text-ink">{% trans "Related Customer" %}</h2>
+        </div>
+        <div class="card-body">
+            <a href="{% url 'customers:detail' log.customer.pk %}" class="btn btn-primary">
+                <i data-feather="eye" class="w-4 h-4"></i>
+                {% trans "View Customer" %}
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

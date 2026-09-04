@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Profile" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl">
+    <div>
+        <p class="page-eyebrow mb-1">{% trans "Account" %}</p>
+        <h1 class="page-title">{% trans "Profile" %}</h1>
+        <p class="page-subtitle mt-1">{% trans "Your account details and settings" %}</p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">{% trans "Personal Information" %}</h2>
+            <a href="{% url 'accounts:profile_edit' %}" class="btn btn-secondary btn-sm">
+                <i data-feather="edit" class="w-4 h-4"></i> {% trans "Edit" %}
+            </a>
+        </div>
+        <div class="card-body">
+            {% if profile_user.logo %}
+            <div class="mb-6">
+                <p class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Company Logo" %}</p>
+                <div class="mt-2">
+                    <img src="{{ profile_user.logo.url }}" alt="{% trans 'Company logo' %}"
+                         class="w-24 h-24 rounded-card object-contain border border-rule shadow-sm bg-paper">
+                </div>
+            </div>
+            {% endif %}
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Name" %}</dt>
+                    <dd class="mt-1 text-ink font-medium">{{ profile_user.get_full_name|default:profile_user.username }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Email" %}</dt>
+                    <dd class="mt-1 text-ink font-mono text-sm">{{ profile_user.email }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Phone" %}</dt>
+                    <dd class="mt-1 text-ink">{{ profile_user.phone|default:"-" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Role" %}</dt>
+                    <dd class="mt-1">
+                        <span class="badge {% if profile_user.is_admin_user %}badge-info{% else %}badge-success{% endif %}">
+                            {{ profile_user.get_role_display }}
+                        </span>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Status" %}</dt>
+                    <dd class="mt-1">
+                        <span class="badge {% if profile_user.is_active %}badge-success{% else %}badge-danger{% endif %}">
+                            {% if profile_user.is_active %}{% trans "Active" %}{% else %}{% trans "Inactive" %}{% endif %}
+                        </span>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Joined" %}</dt>
+                    <dd class="mt-1 text-ink font-mono text-sm">{{ profile_user.date_joined|date:"d M Y" }}</dd>
+                </div>
+                {% if profile_user.sales_person %}
+                <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-muted uppercase tracking-wider">{% trans "Assigned Sales Person" %}</dt>
+                    <dd class="mt-1 text-ink">{{ profile_user.sales_person.name }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+        <div class="card-footer flex gap-3">
+            <a href="{% url 'accounts:password_change' %}" class="btn btn-secondary btn-sm">
+                <i data-feather="key" class="w-4 h-4"></i> {% trans "Change Password" %}
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

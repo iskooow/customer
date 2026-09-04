@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Notifications" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Inbox" %} · {{ page_obj.paginator.count|default:"0" }} {% trans "notifications" %}</p>
+            <h1 class="page-title">{% trans "Expiry Alerts" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Document expiry and compliance notifications" %}</p>
+            {% if last_scan_at %}
+            <p class="text-xs text-muted mt-1">
+                {% trans "Last updated" %} {{ last_scan_at|timesince }} {% trans "ago" %}
+            </p>
+            {% endif %}
+        </div>
+
+        <div class="page-actions">
+            {% if unread_count > 0 %}
+            <form method="post" action="{% url 'notifications:mark_all_read' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary">
+                    <i data-feather="check-square" class="w-4 h-4"></i>
+                    {% trans "Mark All Read" %} ({{ unread_count }})
+                </button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'notifications:refresh' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-feather="refresh-cw" class="w-4 h-4"></i>
+                    {% trans "Refresh Alerts" %}
+                </button>
+            </form>
+
+            <a href="{% url 'notifications:preferences' %}" class="btn btn-secondary">
+                <i data-feather="settings" class="w-4 h-4"></i>
+                {% trans "Preferences" %}
+            </a>
+        </div>
+    </div>
+    
+    <!-- Notifications List -->
+    <div class="card">
+        <div class="card-body p-0">
+            {% if page_obj %}
+            <div class="divide-y divide-rule">
+                {% for notification in page_obj %}
+                <div class="p-4 hover:bg-paper2 {% if notification.status == 'unread' %}bg-info/8 border-l-4 border-info{% endif %}">
+                    <div class="flex items-start gap-4">
+                        <!-- Icon -->
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0
+                            {% if notification.type == 'expired' %}bg-danger/10 text-danger
+                            {% elif notification.type == 'expiry_7_days' %}bg-warning/15 text-warning
+                            {% elif notification.type == 'expiry_30_days' %}bg-warning/15 text-warning
+                            {% elif notification.type == 'expiry_60_days' %}bg-info/12 text-info
+                            {% elif notification.type == 'missing_documents' %}bg-accent/12 text-accent
+                            {% elif notification.type == 'cheque_pending' %}bg-success/12 text-success
+                            {% else %}bg-paper2 text-ink-2{% endif %}">
+                            {% if notification.type == 'expired' %}
+                                <i data-feather="x-circle" class="w-5 h-5"></i>
+                            {% elif 'expiry' in notification.type %}
+                                <i data-feather="clock" class="w-5 h-5"></i>
+                            {% elif notification.type == 'missing_documents' %}
+                                <i data-feather="file-minus" class="w-5 h-5"></i>
+                            {% elif notification.type == 'cheque_pending' %}
+                                <i data-feather="credit-card" class="w-5 h-5"></i>
+                            {% else %}
+                                <i data-feather="bell" class="w-5 h-5"></i>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Content -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between">
+                                <h4 class="font-medium text-ink">{{ notification.title }}</h4>
+                                <span class="text-sm text-muted">{{ notification.created_at|date:"d M Y H:i" }}</span>
+                            </div>
+                            <p class="text-ink-2 text-sm mt-1">{{ notification.message }}</p>
+                            {% if notification.customer %}
+                                <a href="{% url 'customers:detail' notification.customer.pk %}" class="text-accent hover:text-accent text-sm font-medium mt-2 inline-block">
+                                    <i data-feather="user" class="w-3 h-3 inline mr-1"></i>
+                                    {{ notification.customer.company_name }}
+                                </a>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="flex items-center gap-2">
+                            {% if notification.status == 'unread' %}
+                                <span class="badge badge-primary">{% trans "Unread" %}</span>
+                            {% else %}
+                                <span class="badge badge-gray">{% trans "Read" %}</span>
+                            {% endif %}
+                            <form method="post" action="{% url 'notifications:dismiss' notification.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="p-2 text-rule2 hover:text-ink-2" title="{% trans 'Dismiss' %}">
+                                    <i data-feather="x" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i data-feather="bell"></i>
+                    </div>
+                    <h3 class="empty-title">{% trans "No notifications" %}</h3>
+                    <p class="empty-hint">{% trans "You're all caught up!" %}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-muted">
+                {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ page_obj.paginator.count }} {% trans "notifications" %}
+            </div>
+            <div class="flex space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1" class="btn btn-secondary btn-sm"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+                {% endif %}
+                <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Register" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-[70vh]">
+    <div class="w-full max-w-lg">
+        <div class="card">
+            <div class="card-body p-8">
+                <div class="text-center mb-8">
+                    <h1 class="font-display text-2xl font-semibold tracking-tight text-ink">{% trans "Create Account" %}</h1>
+                    <p class="text-sm text-muted mt-2">{% trans "Join the customer records system" %}</p>
+                </div>
+
+                <form method="post" class="space-y-5">
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                    <div class="p-3 rounded-card bg-danger/10 border border-danger/20 text-danger text-sm">
+                        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="id_first_name" class="form-label">{% trans "First Name" %}</label>
+                            <input type="text" name="first_name" id="id_first_name" class="form-input"
+                                   value="{{ form.first_name.value|default:'' }}" required>
+                            {% if form.first_name.errors %}<p class="text-danger text-xs mt-1">{{ form.first_name.errors.0 }}</p>{% endif %}
+                        </div>
+                        <div>
+                            <label for="id_last_name" class="form-label">{% trans "Last Name" %}</label>
+                            <input type="text" name="last_name" id="id_last_name" class="form-input"
+                                   value="{{ form.last_name.value|default:'' }}" required>
+                            {% if form.last_name.errors %}<p class="text-danger text-xs mt-1">{{ form.last_name.errors.0 }}</p>{% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="id_email" class="form-label">{% trans "Email" %}</label>
+                        <input type="email" name="email" id="id_email" class="form-input"
+                               value="{{ form.email.value|default:'' }}" required>
+                        {% if form.email.errors %}<p class="text-danger text-xs mt-1">{{ form.email.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="id_username" class="form-label">{% trans "Username" %}</label>
+                        <input type="text" name="username" id="id_username" class="form-input"
+                               value="{{ form.username.value|default:'' }}" required>
+                        {% if form.username.errors %}<p class="text-danger text-xs mt-1">{{ form.username.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="id_phone" class="form-label">{% trans "Phone" %}</label>
+                        <input type="text" name="phone" id="id_phone" class="form-input"
+                               value="{{ form.phone.value|default:'' }}" placeholder="+971 XX XXX XXXX">
+                    </div>
+
+                    <div>
+                        <label for="id_role" class="form-label">{% trans "Role" %}</label>
+                        <select name="role" id="id_role" class="form-select">
+                            {% for value, label in form.fields.role.choices %}
+                            <option value="{{ value }}" {% if form.role.value == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="id_password1" class="form-label">{% trans "Password" %}</label>
+                        <input type="password" name="password1" id="id_password1" class="form-input" required>
+                        {% if form.password1.errors %}<p class="text-danger text-xs mt-1">{{ form.password1.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label for="id_password2" class="form-label">{% trans "Confirm Password" %}</label>
+                        <input type="password" name="password2" id="id_password2" class="form-input" required>
+                        {% if form.password2.errors %}<p class="text-danger text-xs mt-1">{{ form.password2.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full">
+                        {% trans "Create Account" %}
+                    </button>
+                </form>
+
+                <div class="mt-6 text-center">
+                    <p class="text-sm text-muted">
+                        {% trans "Already have an account?" %}
+                        <a href="{% url 'accounts:login' %}" class="text-accent font-medium hover:underline">{% trans "Sign In" %}</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

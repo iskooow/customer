@@ -1,0 +1,705 @@
+"""
+Views for customers app.
+"""
+
+import csv
+from datetime import date
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Q, Count, Prefetch
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse_lazy, reverse
+from django.utils.translation import gettext_lazy as _
+from django.views.generic import (
+    ListView, DetailView, CreateView, UpdateView, DeleteView, View
+)
+from django.views.decorators.http import require_http_methods
+from django.utils.decorators import method_decorator
+
+from .models import Customer
+from .forms import CustomerForm, CustomerFilterForm, CustomerImportForm
+from .utils import get_days_left, get_expiry_status, get_expiry_filter_queryset
+from documents.models import Document
+from security_cheques.models import SecurityCheque
+from salespersons.models import SalesPerson
+from audit.utils import log_action
+
+
+class CustomerAccessMixin(UserPassesTestMixin):
+    """Mixin to check customer access permissions."""
+    
+    def test_func(self):
+        customer = self.get_object()
+        user = self.request.user
+        
+        if user.is_admin_user:
+            return True
+        
+        if user.is_sales_person_user and hasattr(user, 'sales_person'):
+            return customer.sales_person == user.sales_person
+        
+        return False
+    
+    def handle_no_permission(self):
+        messages.error(self.request, _('You do not have permission to access this customer.'))
+        return redirect('customers:list')
+
+
+class CustomerListView(LoginRequiredMixin, ListView):
+    model = Customer
+    template_name = 'customers/list.html'
+    context_object_name = 'customers'
+    paginate_by = 25
+
+    def get_template_names(self):
+        """Render only the table partial for HTMX requests."""
+        if getattr(self.request, 'htmx', None):
+            return ['customers/partials/table.html']
+        return ['customers/list.html']
+
+    def get_queryset(self):
+        queryset = Customer.objects.select_related('sales_person', 'created_by').prefetch_related(
+            'documents', 'security_cheques'
+        )
+        
+        # Apply user-based filtering
+        if not self.request.user.is_admin_user:
+            if hasattr(self.request.user, 'sales_person') and self.request.user.sales_person:
+                queryset = queryset.filter(sales_person=self.request.user.sales_person)
+            else:
+                queryset = queryset.none()
+        
+        # Get filter parameters
+        self.filter_form = CustomerFilterForm(self.request.GET)
+        
+        if self.filter_form.is_valid():
+            # Search
+            search = self.filter_form.cleaned_data.get('search')
+            if search:
+                queryset = queryset.filter(
+                    Q(company_name__icontains=search) |
+                    Q(trade_license_number__icontains=search) |
+                    Q(passport_number__icontains=search) |
+                    Q(eid_number__icontains=search) |
+                    Q(trn__icontains=search) |
+                    Q(sales_person__name__icontains=search)
+                )
+            
+            # Sales person filter
+            sales_person = self.filter_form.cleaned_data.get('sales_person')
+            if sales_person:
+                queryset = queryset.filter(sales_person=sales_person)
+            
+            # Customer status filter
+            customer_status = self.filter_form.cleaned_data.get('customer_status')
+            if customer_status:
+                queryset = queryset.filter(customer_status=customer_status)
+            
+            # Document status filter
+            document_status = self.filter_form.cleaned_data.get('document_status')
+            if document_status:
+                if document_status == 'expired':
+                    queryset = queryset.filter(
+                        Q(trade_license_expiry__lt=date.today()) |
+                        Q(passport_expiry__lt=date.today()) |
+                        Q(eid_expiry__lt=date.today())
+                    )
+                elif document_status == '7_days':
+                    from datetime import timedelta
+                    today = date.today()
+                    week_later = today + timedelta(days=7)
+                    queryset = queryset.filter(
+                        Q(trade_license_expiry__gte=today, trade_license_expiry__lte=week_later) |
+                        Q(passport_expiry__gte=today, passport_expiry__lte=week_later) |
+                        Q(eid_expiry__gte=today, eid_expiry__lte=week_later)
+                    )
+                elif document_status == '30_days':
+                    from datetime import timedelta
+                    today = date.today()
+                    month_later = today + timedelta(days=30)
+                    queryset = queryset.filter(
+                        Q(trade_license_expiry__gte=today, trade_license_expiry__lte=month_later) |
+                        Q(passport_expiry__gte=today, passport_expiry__lte=month_later) |
+                        Q(eid_expiry__gte=today, eid_expiry__lte=month_later)
+                    )
+                elif document_status == '60_days':
+                    from datetime import timedelta
+                    today = date.today()
+                    two_months_later = today + timedelta(days=60)
+                    queryset = queryset.filter(
+                        Q(trade_license_expiry__gte=today, trade_license_expiry__lte=two_months_later) |
+                        Q(passport_expiry__gte=today, passport_expiry__lte=two_months_later) |
+                        Q(eid_expiry__gte=today, eid_expiry__lte=two_months_later)
+                    )
+                elif document_status == 'missing':
+                    # Customers missing at least one required document
+                    queryset = queryset.exclude(copy_status=Customer.CopyStatus.COMPLETE)
+            
+            # Copy status filter
+            copy_status = self.filter_form.cleaned_data.get('copy_status')
+            if copy_status:
+                queryset = queryset.filter(copy_status=copy_status)
+            
+            # Cheque status filter
+            cheque_status = self.filter_form.cleaned_data.get('cheque_status')
+            if cheque_status:
+                queryset = queryset.filter(security_cheques__status=cheque_status).distinct()
+        
+        # Sorting
+        sort = self.request.GET.get('sort', '-created_at')
+        allowed_sorts = [
+            'company_name', '-company_name',
+            'trade_license_number', '-trade_license_number',
+            'trade_license_expiry', '-trade_license_expiry',
+            'passport_expiry', '-passport_expiry',
+            'eid_expiry', '-eid_expiry',
+            'sales_person__name', '-sales_person__name',
+            'customer_status', '-customer_status',
+            'copy_status', '-copy_status',
+            'created_at', '-created_at',
+        ]
+        if sort in allowed_sorts:
+            queryset = queryset.order_by(sort)
+        else:
+            queryset = queryset.order_by('-created_at')
+        
+        return queryset.distinct()
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['filter_form'] = self.filter_form
+        context['sort'] = self.request.GET.get('sort', '-created_at')
+        
+        # Add computed fields for each customer
+        for customer in context['customers']:
+            customer.tl_days_left = customer.get_trade_license_days_left()
+            customer.tl_status = customer.get_trade_license_status()
+            customer.passport_days_left = customer.get_passport_days_left()
+            customer.passport_status = customer.get_passport_status()
+            customer.eid_days_left = customer.get_eid_days_left()
+            customer.eid_status = customer.get_eid_status()
+        
+        return context
+
+
+class CustomerDetailView(LoginRequiredMixin, CustomerAccessMixin, DetailView):
+    model = Customer
+    template_name = 'customers/detail.html'
+    context_object_name = 'customer'
+    
+    def get_queryset(self):
+        return Customer.objects.select_related('sales_person', 'created_by', 'updated_by').prefetch_related(
+            'documents',
+            'security_cheques',
+        )
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        customer = self.object
+        
+        # Add computed fields
+        context['tl_days_left'] = customer.get_trade_license_days_left()
+        context['tl_status'] = customer.get_trade_license_status()
+        context['passport_days_left'] = customer.get_passport_days_left()
+        context['passport_status'] = customer.get_passport_status()
+        context['eid_days_left'] = customer.get_eid_days_left()
+        context['eid_status'] = customer.get_eid_status()
+        
+        # Documents grouped by type
+        context['documents_by_type'] = {}
+        for doc in customer.documents.all():
+            if doc.document_type not in context['documents_by_type']:
+                context['documents_by_type'][doc.document_type] = []
+            context['documents_by_type'][doc.document_type].append(doc)
+        
+        # Security cheques
+        context['security_cheques'] = customer.security_cheques.all()
+        
+        return context
+
+
+class CustomerCreateView(LoginRequiredMixin, CreateView):
+    model = Customer
+    form_class = CustomerForm
+    template_name = 'customers/form.html'
+    success_url = reverse_lazy('customers:list')
+    
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+    
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        log_action(
+            user=self.request.user,
+            action='created',
+            customer=self.object,
+            description=f'Created customer: {self.object.company_name}',
+            request=self.request,
+        )
+        messages.success(self.request, _('Customer created successfully.'))
+        
+        if '_addanother' in self.request.POST:
+            return redirect('customers:add')
+        return response
+
+
+class CustomerUpdateView(LoginRequiredMixin, CustomerAccessMixin, UpdateView):
+    model = Customer
+    form_class = CustomerForm
+    template_name = 'customers/form.html'
+    
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+    
+    def get_success_url(self):
+        return reverse('customers:detail', kwargs={'pk': self.object.pk})
+    
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        log_action(
+            user=self.request.user,
+            action='updated',
+            customer=self.object,
+            description=f'Updated customer: {self.object.company_name}',
+            request=self.request,
+        )
+        messages.success(self.request, _('Customer updated successfully.'))
+        return response
+
+
+class CustomerDeleteView(LoginRequiredMixin, CustomerAccessMixin, DeleteView):
+    model = Customer
+    template_name = 'customers/confirm_delete.html'
+    success_url = reverse_lazy('customers:list')
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_admin_user:
+            messages.error(request, _('Only administrators can delete customers.'))
+            return redirect('customers:list')
+        return super().dispatch(request, *args, **kwargs)
+    
+    def delete(self, request, *args, **kwargs):
+        customer = self.get_object()
+        company_name = customer.company_name
+        log_action(
+            user=request.user,
+            action='deleted',
+            customer=customer,
+            description=f'Deleted customer: {company_name}',
+            request=request,
+        )
+        messages.success(request, _('Customer deleted successfully.'))
+        return super().delete(request, *args, **kwargs)
+
+
+class CustomerExportView(LoginRequiredMixin, View):
+    """Export customers to Excel or CSV."""
+    
+    def get(self, request, *args, **kwargs):
+        # Reuse the same filtering logic as list view
+        list_view = CustomerListView()
+        list_view.request = request
+        queryset = list_view.get_queryset()
+        
+        export_format = request.GET.get('format', 'excel')
+        
+        if export_format == 'csv':
+            return self.export_csv(queryset)
+        else:
+            return self.export_excel(queryset)
+    
+    def export_csv(self, queryset):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="customers_{date.today()}.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'S.N', 'Company Name', 'Trade License', 'Trade License Expiry', 'Trade License Days Left',
+            'Passport', 'Passport Expiry', 'Passport Days Left',
+            'EID', 'EID Expiry', 'EID Days Left',
+            'Copy Status', 'TRN', 'Security Cheque', 'Sales Person'
+        ])
+        
+        for i, customer in enumerate(queryset, 1):
+            cheque = customer.security_cheques.first()
+            writer.writerow([
+                i,
+                customer.company_name,
+                customer.trade_license_number,
+                customer.trade_license_expiry.strftime('%Y-%m-%d') if customer.trade_license_expiry else '',
+                customer.get_trade_license_days_left() or '',
+                customer.passport_number,
+                customer.passport_expiry.strftime('%Y-%m-%d') if customer.passport_expiry else '',
+                customer.get_passport_days_left() or '',
+                customer.eid_number,
+                customer.eid_expiry.strftime('%Y-%m-%d') if customer.eid_expiry else '',
+                customer.get_eid_days_left() or '',
+                customer.get_copy_status_display(),
+                customer.trn,
+                cheque.get_status_display() if cheque else 'Not Received',
+                customer.sales_person.name if customer.sales_person else '',
+            ])
+        
+        return response
+    
+    def export_excel(self, queryset):
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.utils import get_column_letter
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Customers'
+        
+        # Header style
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='1F2937', end_color='1F2937', fill_type='solid')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin'),
+        )
+        
+        headers = [
+            'S.N', 'Company Name', 'Trade License', 'Trade License Expiry', 'Trade License Days Left',
+            'Passport', 'Passport Expiry', 'Passport Days Left',
+            'EID', 'EID Expiry', 'EID Days Left',
+            'Copy Status', 'TRN', 'Security Cheque', 'Sales Person'
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        
+        # Data rows
+        for i, customer in enumerate(queryset, 1):
+            cheque = customer.security_cheques.first()
+            row_data = [
+                i,
+                customer.company_name,
+                customer.trade_license_number,
+                customer.trade_license_expiry,
+                customer.get_trade_license_days_left(),
+                customer.passport_number,
+                customer.passport_expiry,
+                customer.get_passport_days_left(),
+                customer.eid_number,
+                customer.eid_expiry,
+                customer.get_eid_days_left(),
+                customer.get_copy_status_display(),
+                customer.trn,
+                cheque.get_status_display() if cheque else 'Not Received',
+                customer.sales_person.name if customer.sales_person else '',
+            ]
+            
+            for col, value in enumerate(row_data, 1):
+                cell = ws.cell(row=i+1, column=col, value=value)
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical='center', wrap_text=True)
+                
+                # Format date cells
+                if col in [4, 6, 8, 10] and value:
+                    cell.number_format = 'YYYY-MM-DD'
+        
+        # Auto-fit columns
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 20
+        
+        # Freeze header row
+        ws.freeze_panes = 'A2'
+        
+        # Auto-filter
+        ws.auto_filter.ref = f'A1:{get_column_letter(len(headers))}{queryset.count() + 1}'
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="customers_{date.today()}.xlsx"'
+        
+        wb.save(response)
+        return response
+
+
+class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """Import customers from Excel."""
+    
+    def test_func(self):
+        return self.request.user.is_admin_user
+    
+    def get(self, request):
+        form = CustomerImportForm()
+        return render(request, 'customers/import.html', {'form': form})
+    
+    def post(self, request):
+        form = CustomerImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            return self.process_import(request, form.cleaned_data['excel_file'])
+        return render(request, 'customers/import.html', {'form': form})
+    
+    def process_import(self, request, excel_file):
+        import openpyxl
+        from io import BytesIO
+        
+        try:
+            wb = openpyxl.load_workbook(BytesIO(excel_file.read()))
+            ws = wb.active
+        except Exception as e:
+            messages.error(request, _('Error reading Excel file: {}').format(str(e)))
+            return redirect('customers:import')
+        
+        # Normalize headers
+        headers = []
+        for cell in ws[1]:
+            header = str(cell.value).strip().upper() if cell.value else ''
+            headers.append(header)
+        
+        # Expected columns mapping
+        column_map = {
+            'S.N': 'sn',
+            'COMPANY NAME': 'company_name',
+            'COMPANY': 'company_name',
+            'TRADE LICENSE': 'trade_license_number',
+            'TRADE LICENCE': 'trade_license_number',
+            'EXPIRE DATE': 'trade_license_expiry',
+            'TRADE LICENSE EXPIRY': 'trade_license_expiry',
+            'PASSPORT': 'passport_number',
+            'PASSPORT EXPIRY': 'passport_expiry',
+            'EID': 'eid_number',
+            'EID EXPIRY': 'eid_expiry',
+            'COPY': 'copy_status',
+            'TRN': 'trn',
+            'SECURITY CHEQUE': 'cheque_status',
+            'SALES PERSON': 'sales_person',
+        }
+        
+        # Map column indices
+        col_indices = {}
+        for idx, header in enumerate(headers):
+            if header in column_map:
+                col_indices[column_map[header]] = idx
+        
+        if 'company_name' not in col_indices:
+            messages.error(request, _('Required column "Company Name" not found in Excel file.'))
+            return redirect('customers:import')
+        
+        # Process rows
+        valid_rows = []
+        errors = []
+        duplicates = 0
+        seen_names = set()      # Track within-file duplicates
+        seen_licenses = set()
+        seen_trns = set()
+        
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+            if not any(row):
+                continue
+            
+            try:
+                company_name = str(row[col_indices.get('company_name', 0)] or '').strip()
+                if not company_name:
+                    errors.append(f'Row {row_idx}: Company name is required.')
+                    continue
+                
+                # Check for duplicate in DB and within this import file
+                if Customer.objects.filter(company_name__iexact=company_name).exists():
+                    duplicates += 1
+                    errors.append(f'Row {row_idx}: Duplicate company name \"{company_name}\" (already in database).')
+                    continue
+                if company_name.lower() in seen_names:
+                    duplicates += 1
+                    errors.append(f'Row {row_idx}: Duplicate company name \"{company_name}\" (duplicated within this file).')
+                    continue
+                seen_names.add(company_name.lower())
+
+                trade_license = str(row[col_indices.get('trade_license_number', 1)] or '').strip()
+                if trade_license and Customer.objects.filter(trade_license_number__iexact=trade_license).exists():
+                    duplicates += 1
+                    errors.append(f'Row {row_idx}: Duplicate trade license \"{trade_license}\" (already in database).')
+                    continue
+                if trade_license and trade_license.lower() in seen_licenses:
+                    duplicates += 1
+                    errors.append(f'Row {row_idx}: Duplicate trade license \"{trade_license}\" (duplicated within this file).')
+                    continue
+                if trade_license:
+                    seen_licenses.add(trade_license.lower())
+
+                trn = str(row[col_indices.get('trn')] or '').strip() if 'trn' in col_indices else ''
+                if trn and Customer.objects.filter(trn__iexact=trn).exists():
+                    duplicates += 1
+                    errors.append(f'Row {row_idx}: Duplicate TRN \"{trn}\" (already in database).')
+                    continue
+                if trn and trn.lower() in seen_trns:
+                    duplicates += 1
+                    errors.append(f'Row {row_idx}: Duplicate TRN \"{trn}\" (duplicated within this file).')
+                    continue
+                if trn:
+                    seen_trns.add(trn.lower())
+
+                # Parse dates
+                def parse_date(val):
+                    if not val:
+                        return None
+                    if isinstance(val, date):
+                        return val
+                    if isinstance(val, str):
+                        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d'):
+                            try:
+                                return date.strptime(val.strip(), fmt)
+                            except ValueError:
+                                continue
+                    return None
+                
+                trade_license_expiry = parse_date(row[col_indices.get('trade_license_expiry')] if 'trade_license_expiry' in col_indices else None)
+                passport_expiry = parse_date(row[col_indices.get('passport_expiry')] if 'passport_expiry' in col_indices else None)
+                eid_expiry = parse_date(row[col_indices.get('eid_expiry')] if 'eid_expiry' in col_indices else None)
+                
+                # Sales person
+                sales_person = None
+                sp_name = str(row[col_indices.get('sales_person')] or '').strip() if 'sales_person' in col_indices else ''
+                if sp_name:
+                    sales_person = SalesPerson.objects.filter(name__iexact=sp_name, active=True).first()
+                    if not sales_person:
+                        errors.append(f'Row {row_idx}: Sales person "{sp_name}" not found.')
+                        # Continue without sales person
+                
+                valid_rows.append({
+                    'company_name': company_name,
+                    'trade_license_number': trade_license or None,
+                    'trade_license_expiry': trade_license_expiry,
+                    'passport_number': str(row[col_indices.get('passport_number')] or '').strip() if 'passport_number' in col_indices else '',
+                    'passport_expiry': passport_expiry,
+                    'eid_number': str(row[col_indices.get('eid_number')] or '').strip() if 'eid_number' in col_indices else '',
+                    'eid_expiry': eid_expiry,
+                    'trn': trn or None,
+                    'sales_person': sales_person,
+                    'customer_status': Customer.CustomerStatus.ACTIVE,
+                    'created_by': request.user,
+                    'updated_by': request.user,
+                })
+                
+            except Exception as e:
+                errors.append(f'Row {row_idx}: {str(e)}')
+        
+        # Store preview in session
+        request.session['import_preview'] = {
+            'valid_rows': valid_rows,
+            'errors': errors,
+            'duplicates': duplicates,
+            'total_rows': len(valid_rows) + duplicates + len(errors),
+        }
+        
+        return redirect('customers:import_preview')
+
+
+class CustomerImportPreviewView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """Show import preview and confirm import."""
+    
+    def test_func(self):
+        return self.request.user.is_admin_user
+    
+    def get(self, request):
+        preview = request.session.get('import_preview')
+        if not preview:
+            messages.error(request, _('No import preview found. Please upload a file first.'))
+            return redirect('customers:import')
+        return render(request, 'customers/import_preview.html', {'preview': preview})
+    
+    def post(self, request):
+        preview = request.session.get('import_preview')
+        if not preview:
+            messages.error(request, _('No import preview found.'))
+            return redirect('customers:import')
+        
+        if 'confirm' in request.POST:
+            return self.confirm_import(request, preview)
+        else:
+            return redirect('customers:import')
+    
+    def confirm_import(self, request, preview):
+        created_count = 0
+        for row_data in preview['valid_rows']:
+            try:
+                customer = Customer.objects.create(**row_data)
+                customer.update_copy_status()
+                log_action(
+                    user=request.user,
+                    action='imported',
+                    customer=customer,
+                    description=f'Imported customer: {customer.company_name}',
+                    request=request,
+                )
+                created_count += 1
+            except Exception as e:
+                messages.error(request, _('Error importing {}: {}').format(row_data['company_name'], str(e)))
+        
+        # Clear session
+        del request.session['import_preview']
+        
+        messages.success(request, _('Successfully imported {} customers.').format(created_count))
+        if preview['errors']:
+            messages.warning(request, _('{} rows had errors and were skipped.').format(len(preview['errors'])))
+        if preview['duplicates']:
+            messages.warning(request, _('{} duplicate rows were skipped.').format(preview['duplicates']))
+        
+        return redirect('customers:list')
+
+
+class CustomerPrintView(LoginRequiredMixin, CustomerAccessMixin, DetailView):
+    """Print-friendly customer view."""
+    model = Customer
+    template_name = 'customers/print.html'
+    context_object_name = 'customer'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        customer = self.object
+        context['tl_days_left'] = customer.get_trade_license_days_left()
+        context['tl_status'] = customer.get_trade_license_status()
+        context['passport_days_left'] = customer.get_passport_days_left()
+        context['passport_status'] = customer.get_passport_status()
+        context['eid_days_left'] = customer.get_eid_days_left()
+        context['eid_status'] = customer.get_eid_status()
+        context['print_date'] = date.today()
+        return context
+
+
+# HTMX partial views
+def customer_row_partial(request, pk):
+    """Return a single customer row for HTMX updates."""
+    customer = get_object_or_404(Customer, pk=pk)
+    
+    # Check permissions
+    if not request.user.is_admin_user:
+        if not (request.user.is_sales_person_user and 
+                hasattr(request.user, 'sales_person') and 
+                customer.sales_person == request.user.sales_person):
+            return HttpResponse(status=403)
+    
+    tl_days_left = customer.get_trade_license_days_left()
+    tl_status = customer.get_trade_license_status()
+    passport_days_left = customer.get_passport_days_left()
+    passport_status = customer.get_passport_status()
+    eid_days_left = customer.get_eid_days_left()
+    eid_status = customer.get_eid_status()
+    cheque = customer.security_cheques.first()
+    
+    return render(request, 'customers/partials/customer_row.html', {
+        'customer': customer,
+        'tl_days_left': tl_days_left,
+        'tl_status': tl_status,
+        'passport_days_left': passport_days_left,
+        'passport_status': passport_status,
+        'eid_days_left': eid_days_left,
+        'eid_status': eid_status,
+        'cheque': cheque,
+    })

@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Customers" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Registry" %} · {{ paginator.count|default:"0" }} {% trans "records" %}</p>
+            <h1 class="page-title">{% trans "Customers" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Manage customer records and document expiries" %}</p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'customers:add' %}" class="btn btn-primary">
+                <i data-feather="plus" class="w-4 h-4"></i>
+                {% trans "Add Customer" %}
+            </a>
+            <a href="{% url 'customers:import' %}" class="btn btn-secondary">
+                <i data-feather="upload-cloud" class="w-4 h-4"></i>
+                {% trans "Import" %}
+            </a>
+            <a href="{% url 'customers:export' %}" class="btn btn-secondary">
+                <i data-feather="download-cloud" class="w-4 h-4"></i>
+                {% trans "Export" %}
+            </a>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card">
+        <div class="card-body">
+            <form method="get" hx-get="{% url 'customers:list' %}" hx-target="#customer-table" hx-indicator="#filter-spinner" class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <!-- Search -->
+                    <div class="sm:col-span-2 xl:col-span-2">
+                        <label class="form-label">{% trans "Search" %}</label>
+                        <div class="relative">
+                            <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none"></i>
+                            <input type="search" name="search" value="{{ filter_form.search.value|default:'' }}" 
+                                   placeholder="{% trans 'Search by name, license, passport, EID, TRN, sales person...' %}"
+                                   class="form-input pl-10"
+                                   hx-get="{% url 'customers:list' %}"
+                                   hx-trigger="keyup changed delay:300ms"
+                                   hx-target="#customer-table"
+                                   hx-indicator="#search-spinner">
+                            <span id="search-spinner" class="htmx-indicator absolute right-3 top-1/2 -translate-y-1/2 hidden"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Sales Person Filter -->
+                    <div class="min-w-[200px]">
+                        <label class="form-label">{% trans "Sales Person" %}</label>
+                        <select name="sales_person" class="form-select" 
+                                hx-get="{% url 'customers:list' %}"
+                                hx-trigger="change"
+                                hx-target="#customer-table"
+                                hx-indicator="#filter-spinner">
+                            <option value="">{% trans "All Sales Persons" %}</option>
+                            {% for sp in filter_form.fields.sales_person.queryset %}
+                                <option value="{{ sp.pk }}" {% if filter_form.sales_person.value == sp.pk|stringformat:"s" %}selected{% endif %}>
+                                    {{ sp.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Customer Status Filter -->
+                    <div class="min-w-[180px]">
+                        <label class="form-label">{% trans "Customer Status" %}</label>
+                        <select name="customer_status" class="form-select"
+                                hx-get="{% url 'customers:list' %}"
+                                hx-trigger="change"
+                                hx-target="#customer-table"
+                                hx-indicator="#filter-spinner">
+                            <option value="">{% trans "All Statuses" %}</option>
+                            {% for value, label in filter_form.fields.customer_status.choices %}
+                                <option value="{{ value }}" {% if filter_form.customer_status.value == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Document Status Filter -->
+                    <div class="min-w-[200px]">
+                        <label class="form-label">{% trans "Document Status" %}</label>
+                        <select name="document_status" class="form-select"
+                                hx-get="{% url 'customers:list' %}"
+                                hx-trigger="change"
+                                hx-target="#customer-table"
+                                hx-indicator="#filter-spinner">
+                            <option value="">{% trans "All Documents" %}</option>
+                            {% for value, label in filter_form.fields.document_status.choices %}
+                                <option value="{{ value }}" {% if filter_form.document_status.value == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Copy Status Filter -->
+                    <div class="min-w-[180px]">
+                        <label class="form-label">{% trans "Copy Status" %}</label>
+                        <select name="copy_status" class="form-select"
+                                hx-get="{% url 'customers:list' %}"
+                                hx-trigger="change"
+                                hx-target="#customer-table"
+                                hx-indicator="#filter-spinner">
+                            <option value="">{% trans "All Copy Status" %}</option>
+                            {% for value, label in filter_form.fields.copy_status.choices %}
+                                <option value="{{ value }}" {% if filter_form.copy_status.value == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Cheque Status Filter -->
+                    <div class="min-w-[180px]">
+                        <label class="form-label">{% trans "Cheque Status" %}</label>
+                        <select name="cheque_status" class="form-select"
+                                hx-get="{% url 'customers:list' %}"
+                                hx-trigger="change"
+                                hx-target="#customer-table"
+                                hx-indicator="#filter-spinner">
+                            <option value="">{% trans "All Cheque Status" %}</option>
+                            {% for value, label in filter_form.fields.cheque_status.choices %}
+                                <option value="{{ value }}" {% if filter_form.cheque_status.value == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Sorting -->
+                    <div class="min-w-[180px]">
+                        <label class="form-label">{% trans "Sort by" %}</label>
+                        <select name="sort" class="form-select"
+                                hx-get="{% url 'customers:list' %}"
+                                hx-trigger="change"
+                                hx-target="#customer-table"
+                                hx-indicator="#filter-spinner">
+                            <option value="-created_at" {% if sort == '-created_at' %}selected{% endif %}>{% trans "Newest First" %}</option>
+                            <option value="created_at" {% if sort == 'created_at' %}selected{% endif %}>{% trans "Oldest First" %}</option>
+                            <option value="company_name" {% if sort == 'company_name' %}selected{% endif %}>{% trans "Company (A–Z)" %}</option>
+                            <option value="-company_name" {% if sort == '-company_name' %}selected{% endif %}>{% trans "Company (Z–A)" %}</option>
+                            <option value="trade_license_number" {% if sort == 'trade_license_number' %}selected{% endif %}>{% trans "Trade License (A–Z)" %}</option>
+                            <option value="-trade_license_number" {% if sort == '-trade_license_number' %}selected{% endif %}>{% trans "Trade License (Z–A)" %}</option>
+                            <option value="trade_license_expiry" {% if sort == 'trade_license_expiry' %}selected{% endif %}>{% trans "Expiry (Soonest)" %}</option>
+                            <option value="-trade_license_expiry" {% if sort == '-trade_license_expiry' %}selected{% endif %}>{% trans "Expiry (Latest)" %}</option>
+                            <option value="sales_person__name" {% if sort == 'sales_person__name' %}selected{% endif %}>{% trans "Sales Person (A–Z)" %}</option>
+                            <option value="-sales_person__name" {% if sort == '-sales_person__name' %}selected{% endif %}>{% trans "Sales Person (Z–A)" %}</option>
+                            <option value="copy_status" {% if sort == 'copy_status' %}selected{% endif %}>{% trans "Copy Status (A–Z)" %}</option>
+                            <option value="-copy_status" {% if sort == '-copy_status' %}selected{% endif %}>{% trans "Copy Status (Z–A)" %}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 pt-4 border-t border-rule sm:col-span-2 lg:col-span-3 xl:col-span-6">
+                    <span id="filter-spinner" class="htmx-indicator"></span>
+                    <a href="{% url 'customers:list' %}" class="btn btn-secondary btn-sm">
+                        <i data-feather="x" class="w-3 h-3"></i>
+                        {% trans "Clear Filters" %}
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Customer Table -->
+    <div class="card" id="customer-table">
+        {% include 'customers/partials/table.html' %}
+    </div>
+</div>
+{% endblock %}

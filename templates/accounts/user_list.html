@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Users" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Access Control" %} · {{ page_obj.paginator.count|default:"0" }} {% trans "users" %}</p>
+            <h1 class="page-title">{% trans "Users" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Manage system users and permissions" %}</p>
+        </div>
+    </div>
+    
+    <!-- Users Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Name" %}</th>
+                            <th>{% trans "Email" %}</th>
+                            <th>{% trans "Username" %}</th>
+                            <th>{% trans "Role" %}</th>
+                            <th>{% trans "Phone" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Date Joined" %}</th>
+                            <th>{% trans "Actions" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in page_obj %}
+                        <tr>
+                            <td class="font-medium">{{ u.get_full_name|default:"—" }}</td>
+                            <td>{{ u.email }}</td>
+                            <td>{{ u.username }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if u.role == 'admin' %}badge-danger
+                                    {% else %}badge-info{% endif %}">
+                                    {{ u.get_role_display }}
+                                </span>
+                            </td>
+                            <td>{{ u.phone|default:"—" }}</td>
+                            <td>
+                                {% if u.is_active %}
+                                    <span class="badge badge-success">{% trans "Active" %}</span>
+                                {% else %}
+                                    <span class="badge badge-danger">{% trans "Inactive" %}</span>
+                                {% endif %}
+                            </td>
+                            <td class="whitespace-nowrap">{{ u.date_joined|date:"d M Y" }}</td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <a href="{% url 'accounts:user_edit' u.pk %}" class="text-accent hover:text-accent text-sm font-medium">
+                                        {% trans "Edit" %}
+                                    </a>
+                                    {% if u != user %}
+                                    <form action="{% url 'accounts:user_edit' u.pk %}" method="post" class="inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="toggle_active" value="1">
+                                        <button type="submit" class="text-ink-2 hover:text-ink text-sm font-medium"
+                                                onclick="return confirm('{% trans 'Are you sure you want to change this user status?' %}')">
+                                            {% if u.is_active %}{% trans "Deactivate" %}{% else %}{% trans "Activate" %}{% endif %}
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="py-0">
+                                <div class="empty-state">
+                                    <div class="empty-icon">
+                                        <i data-feather="users"></i>
+                                    </div>
+                                    <h3 class="empty-title">{% trans "No users found" %}</h3>
+                                    <p class="empty-hint">{% trans "System accounts will appear here once created." %}</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-muted">
+                {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ page_obj.paginator.count }} {% trans "users" %}
+            </div>
+            <div class="flex space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1" class="btn btn-secondary btn-sm"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+                {% endif %}
+                <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load custom_filters %}
+
+{% block title %}{{ customer.company_name }} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">
+                <a href="{% url 'customers:list' %}" class="text-muted hover:text-accent transition-colors duration-short">{% trans "Customers" %}</a>
+                <span class="mx-1 text-rule2">/</span>
+                {% trans "Detail" %}
+            </p>
+            <h1 class="page-title">{{ customer.company_name }}</h1>
+            <div class="flex flex-wrap items-center gap-3 mt-2">
+                <span class="badge 
+                    {% if customer.customer_status == 'active' %}badge-success
+                    {% elif customer.customer_status == 'pending' %}badge-warning
+                    {% else %}badge-gray{% endif %}">
+                    {{ customer.get_customer_status_display }}
+                </span>
+                {% if customer.sales_person %}
+                    <span class="badge badge-info">
+                        <i data-feather="user" class="w-3 h-3"></i>
+                        {{ customer.sales_person.name }}
+                    </span>
+                {% endif %}
+                <span class="text-sm text-muted">
+                    {% trans "Created" %} {{ customer.created_at|date:"d M Y" }}
+                </span>
+            </div>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'customers:edit' customer.pk %}" class="btn btn-secondary">
+                <i data-feather="edit" class="w-4 h-4"></i>
+                {% trans "Edit" %}
+            </a>
+            <a href="{% url 'documents:upload' customer.pk %}" class="btn btn-secondary">
+                <i data-feather="upload" class="w-4 h-4"></i>
+                {% trans "Upload Document" %}
+            </a>
+            <a href="{% url 'customers:print' customer.pk %}" target="_blank" class="btn btn-secondary">
+                <i data-feather="printer" class="w-4 h-4"></i>
+                {% trans "Print" %}
+            </a>
+            <a href="{% url 'reports:customer_detail' customer.pk %}?format=pdf" class="btn btn-secondary">
+                <i data-feather="download" class="w-4 h-4"></i>
+                {% trans "PDF" %}
+            </a>
+{% if user.is_admin_user %}
+                <a href="{% url 'customers:delete' customer.pk %}" class="btn btn-danger"
+                   onclick="return confirm('{% trans 'Are you sure you want to delete this customer? This action cannot be undone.' %}')">
+                    <i data-feather="trash-2" class="w-4 h-4"></i>
+                    {% trans "Delete" %}
+                </a>
+                {% endif %}
+        </div>
+    </div>
+    
+    <!-- Company Information -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Company Info Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-lg font-semibold text-ink flex items-center">
+                        <i data-feather="building" class="w-5 h-5 mr-2 text-accent"></i>
+                        {% trans "Company Information" %}
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Company Name" %}</dt>
+                            <dd class="mt-1 font-medium text-ink">{{ customer.company_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Trade License" %}</dt>
+                            <dd class="mt-1 font-medium text-ink">{{ customer.trade_license_number|default:"—" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Trade License Expiry" %}</dt>
+                            <dd class="mt-1 flex items-center gap-2">
+                                <span class="font-medium">{{ customer.trade_license_expiry|date:"d M Y"|default:"—" }}</span>
+                                {% if tl_status %}
+                                    <span class="badge {{ tl_status.css_class }}">{{ tl_status.label }}</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Days Left" %}</dt>
+                            <dd class="mt-1 font-medium">
+                                {% if tl_days_left is not None %}
+                                    {% if tl_days_left < 0 %}<span class="text-danger">{% trans "EXPIRED" %}</span>
+                                    {% else %}{{ tl_days_left }} {% trans "Days" %}{% endif %}
+                                {% else %}—{% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "TRN" %}</dt>
+                            <dd class="mt-1 font-medium font-mono">{{ customer.trn|default:"—" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Sales Person" %}</dt>
+                            <dd class="mt-1 font-medium">{{ customer.sales_person.name|default:"—" }}</dd>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm text-muted">{% trans "Customer Status" %}</dt>
+                            <dd class="mt-1">
+                                <span class="badge 
+                                    {% if customer.customer_status == 'active' %}badge-success
+                                    {% elif customer.customer_status == 'pending' %}badge-warning
+                                    {% else %}badge-gray{% endif %}">
+                                    {{ customer.get_customer_status_display }}
+                                </span>
+                            </dd>
+                        </div>
+                        {% if customer.notes %}
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm text-muted">{% trans "Notes" %}</dt>
+                            <dd class="mt-1 text-ink-2">{{ customer.notes }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+            
+            <!-- Passport Information -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-lg font-semibold text-ink flex items-center">
+                        <i data-feather="book" class="w-5 h-5 mr-2 text-info"></i>
+                        {% trans "Passport Information" %}
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Passport Number" %}</dt>
+                            <dd class="mt-1 font-medium font-mono">{{ customer.passport_number|default:"—" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Expiry Date" %}</dt>
+                            <dd class="mt-1 font-medium">{{ customer.passport_expiry|date:"d M Y"|default:"—" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Days Left" %}</dt>
+                            <dd class="mt-1 font-medium">
+                                {% if passport_days_left is not None %}
+                                    {% if passport_days_left < 0 %}<span class="text-danger font-bold">{% trans "EXPIRED" %}</span>
+                                    {% else %}{{ passport_days_left }} {% trans "Days" %}{% endif %}
+                                {% else %}—{% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Status" %}</dt>
+                            <dd class="mt-1">
+                                {% if passport_status %}
+                                    <span class="badge {{ passport_status.css_class }}">{{ passport_status.label }}</span>
+                                {% else %}—{% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+            
+            <!-- Emirates ID Information -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-lg font-semibold text-ink flex items-center">
+                        <i data-feather="id-card" class="w-5 h-5 mr-2 text-success"></i>
+                        {% trans "Emirates ID Information" %}
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "EID Number" %}</dt>
+                            <dd class="mt-1 font-medium font-mono">{{ customer.eid_number|default:"—" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Expiry Date" %}</dt>
+                            <dd class="mt-1 font-medium">{{ customer.eid_expiry|date:"d M Y"|default:"—" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Days Left" %}</dt>
+                            <dd class="mt-1 font-medium">
+                                {% if eid_days_left is not None %}
+                                    {% if eid_days_left < 0 %}<span class="text-danger font-bold">{% trans "EXPIRED" %}</span>
+                                    {% else %}{{ eid_days_left }} {% trans "Days" %}{% endif %}
+                                {% else %}—{% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm text-muted">{% trans "Status" %}</dt>
+                            <dd class="mt-1">
+                                {% if eid_status %}
+                                    <span class="badge {{ eid_status.css_class }}">{{ eid_status.label }}</span>
+                                {% else %}—{% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+            
+            <!-- Security Cheque -->
+            <div class="card">
+                <div class="card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <h2 class="text-lg font-semibold text-ink flex items-center">
+                        <i data-feather="credit-card" class="w-5 h-5 mr-2 text-accent"></i>
+                        {% trans "Security Cheque" %}
+                        {% if security_cheques %}
+                            <span class="ml-2 badge badge-gray">{{ security_cheques|length }}</span>
+                        {% endif %}
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <a href="{% url 'security_cheques:list' %}" class="btn btn-secondary btn-sm">
+                            <i data-feather="list" class="w-4 h-4"></i>
+                            {% trans "View All" %}
+                        </a>
+                        <a href="{% url 'security_cheques:add' customer.pk %}" class="btn btn-primary btn-sm">
+                            <i data-feather="plus" class="w-4 h-4"></i>
+                            {% trans "Add Cheque" %}
+                        </a>
+                    </div>
+                </div>
+                {% if security_cheques %}
+                <div class="card-body p-0">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Cheque #" %}</th>
+                                    <th class="hidden sm:table-cell num">{% trans "Amount" %}</th>
+                                    <th class="hidden md:table-cell">{% trans "Date" %}</th>
+                                    <th>{% trans "Copy" %}</th>
+                                    <th class="text-right">{% trans "Actions" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cheque in security_cheques %}
+                                <tr>
+                                    <td>
+                                        <span class="badge
+                                            {% if cheque.status == 'received' %}badge-success
+                                            {% elif cheque.status == 'pending' %}badge-warning
+                                            {% elif cheque.status == 'returned' %}badge-info
+                                            {% else %}badge-danger{% endif %}">
+                                            {{ cheque.get_status_display }}
+                                        </span>
+                                    </td>
+                                    <td class="font-mono">{{ cheque.cheque_number|default:"—" }}
+                                        {% if cheque.notes %}
+                                            <i data-feather="message-circle" class="w-3.5 h-3.5 text-rule2 ml-1" title="{{ cheque.notes }}"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td class="hidden sm:table-cell num">{{ cheque.amount|floatformat:2|default:"—" }} AED</td>
+                                    <td class="hidden md:table-cell">{{ cheque.cheque_date|date:"d M Y"|default:"—" }}</td>
+                                    <td>
+                                        {% if cheque.file %}<i data-feather="check-circle" class="w-5 h-5 text-success" title="{{ cheque.file_name }}"></i>
+                                        {% else %}<i data-feather="x-circle" class="w-5 h-5 text-danger"></i>{% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="flex items-center justify-end gap-1">
+                                            {% if cheque.file %}
+                                            <a href="{% url 'security_cheques:download' cheque.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Download' %}">
+                                                <i data-feather="download" class="w-4 h-4"></i>
+                                            </a>
+                                            {% endif %}
+                                            <a href="{% url 'security_cheques:edit' cheque.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Edit' %}">
+                                                <i data-feather="edit" class="w-4 h-4"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card-body">
+                    <div class="text-center py-8">
+                        <i data-feather="credit-card" class="w-12 h-12 mx-auto text-rule2 mb-3"></i>
+                        <p class="text-muted">{% trans "No security cheques recorded" %}</p>
+                        <a href="{% url 'security_cheques:add' customer.pk %}" class="btn btn-primary mt-4">
+                            <i data-feather="plus" class="w-4 h-4"></i>
+                            {% trans "Add Security Cheque" %}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+        
+        <!-- Sidebar: Documents & Copy Status -->
+        <div class="space-y-6">
+            <!-- Copy Status -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-lg font-semibold text-ink flex items-center">
+                        <i data-feather="file-check" class="w-5 h-5 mr-2 text-warning"></i>
+                        {% trans "Document Copy Status" %}
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="text-center py-4">
+                        {% if customer.copy_status == 'complete' %}
+                            <div class="w-20 h-20 bg-success/12 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i data-feather="check" class="w-10 h-10 text-success"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-success">{% trans "Complete" %}</h3>
+                            <p class="text-muted mt-1">{% trans "All required documents uploaded" %}</p>
+                        {% elif customer.copy_status == 'partial' %}
+                            <div class="w-20 h-20 bg-warning/15 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i data-feather="alert-triangle" class="w-10 h-10 text-warning"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-warning">{% trans "Partial" %}</h3>
+                            <p class="text-muted mt-1">{% trans "Some required documents missing" %}</p>
+                        {% else %}
+                            <div class="w-20 h-20 bg-danger/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i data-feather="x" class="w-10 h-10 text-danger"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-danger">{% trans "Missing" %}</h3>
+                            <p class="text-muted mt-1">{% trans "No required documents uploaded" %}</p>
+                        {% endif %}
+                    </div>
+                    <div class="mt-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-ink-2">{% trans "Trade License" %}</span>
+                            {% if customer.documents.filter|document_type:"trade_license"|exists %}
+                                <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                            {% else %}
+                                <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-ink-2">{% trans "Passport" %}</span>
+                            {% if customer.documents.filter|document_type:"passport"|exists %}
+                                <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                            {% else %}
+                                <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-ink-2">{% trans "Emirates ID" %}</span>
+                            {% if customer.documents.filter|document_type:"emirates_id"|exists %}
+                                <i data-feather="check-circle" class="w-5 h-5 text-success"></i>
+                            {% else %}
+                                <i data-feather="x-circle" class="w-5 h-5 text-danger"></i>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Documents -->
+            <div class="card">
+                <div class="card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <h2 class="text-lg font-semibold text-ink flex items-center">
+                        <i data-feather="file-text" class="w-5 h-5 mr-2 text-info"></i>
+                        {% trans "Documents" %}
+                    </h2>
+                    <a href="{% url 'documents:upload' customer.pk %}" class="btn btn-primary btn-sm">
+                        <i data-feather="plus" class="w-4 h-4"></i>
+                        {% trans "Upload" %}
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if documents_by_type %}
+                        <div class="divide-y divide-rule">
+                            {% for doc_type, docs in documents_by_type.items %}
+                            <div class="p-4">
+                                <h3 class="text-sm font-medium text-muted uppercase tracking-wider mb-3">
+                                    {{ doc_type|title }}
+                                </h3>
+                                <div class="space-y-2">
+                                    {% for doc in docs %}
+                                    <div class="flex items-center justify-between p-2 hover:bg-paper2 rounded-lg">
+                                        <div class="flex items-center gap-3">
+                                            {% if doc.is_pdf %}
+                                                <i data-feather="file" class="w-6 h-6 text-danger"></i>
+                                            {% elif doc.is_image %}
+                                                <i data-feather="image" class="w-6 h-6 text-success"></i>
+                                            {% else %}
+                                                <i data-feather="file-text" class="w-6 h-6 text-muted"></i>
+                                            {% endif %}
+                                            <div>
+                                                <p class="text-sm font-medium">{{ doc.file_name }}</p>
+                                                <p class="text-xs text-muted">
+                                                    {{ doc.uploaded_at|date:"d M Y H:i" }} • {{ doc.get_file_size_display }}
+                                                    {% if doc.expiry_date %} • {% trans "Expires" %} {{ doc.expiry_date|date:"d M Y" }}{% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <a href="{% url 'documents:view' doc.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'View' %}" target="_blank">
+                                                <i data-feather="eye" class="w-4 h-4"></i>
+                                            </a>
+                                            <a href="{% url 'documents:download' doc.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Download' %}">
+                                                <i data-feather="download" class="w-4 h-4"></i>
+                                            </a>
+                                            <a href="{% url 'documents:edit' doc.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Edit' %}">
+                                                <i data-feather="edit" class="w-4 h-4"></i>
+                                            </a>
+                                            {% if user.is_admin_user %}
+                                            <form action="{% url 'documents:delete' doc.pk %}" method="post" class="inline"
+                                                  onsubmit="return confirm('{% trans 'Are you sure you want to delete this document?' %}')">
+                                                {% csrf_token %}
+                                                <button type="submit" class="p-2 text-danger hover:text-danger hover:bg-danger/10 rounded-lg" title="{% trans 'Delete' %}">
+                                                    <i data-feather="trash-2" class="w-4 h-4"></i>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-12">
+                            <i data-feather="file-text" class="w-16 h-16 mx-auto text-rule2 mb-4"></i>
+                            <p class="text-muted">{% trans "No documents uploaded" %}</p>
+                            <a href="{% url 'documents:upload' customer.pk %}" class="btn btn-primary mt-4">
+                                <i data-feather="upload" class="w-4 h-4"></i>
+                                {% trans "Upload First Document" %}
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

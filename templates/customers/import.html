@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% trans "Import Customers" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Registry" %} / {% trans "Import" %}</p>
+            <h1 class="page-title">{% trans "Import Customers from Excel" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Upload an Excel file to bulk import customer records" %}</p>
+        </div>
+        <a href="{% url 'customers:list' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back to List" %}
+        </a>
+    </div>
+    
+    <!-- Instructions -->
+    <div class="card bg-info/10 border-info/20">
+        <div class="card-body">
+            <h3 class="text-lg font-semibold text-info flex items-center mb-4">
+                <i data-feather="info" class="w-5 h-5"></i>
+                {% trans "Import Instructions" %}
+            </h3>
+            <ul class="space-y-2 text-info text-sm">
+                <li class="flex items-start gap-2"><i data-feather="check" class="w-4 h-4 mt-0.5 flex-shrink-0 text-info"></i>{% trans "Supported format: Excel (.xlsx, .xls)" %}</li>
+                <li class="flex items-start gap-2"><i data-feather="check" class="w-4 h-4 mt-0.5 flex-shrink-0 text-info"></i>{% trans "Maximum file size: 10MB" %}</li>
+                <li class="flex items-start gap-2"><i data-feather="check" class="w-4 h-4 mt-0.5 flex-shrink-0 text-info"></i>{% trans "Required column: Company Name" %}</li>
+                <li class="flex items-start gap-2"><i data-feather="check" class="w-4 h-4 mt-0.5 flex-shrink-0 text-info"></i>{% trans "Date formats accepted: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY" %}</li>
+                <li class="flex items-start gap-2"><i data-feather="check" class="w-4 h-4 mt-0.5 flex-shrink-0 text-info"></i>{% trans "Duplicate detection by Company Name and Trade License" %}</li>
+                <li class="flex items-start gap-2"><i data-feather="check" class="w-4 h-4 mt-0.5 flex-shrink-0 text-info"></i>{% trans "Sales Person must exist and be active" %}</li>
+            </ul>
+            <div class="mt-4 p-3 bg-paper rounded-lg border border-info/20">
+                <p class="text-sm font-medium text-info mb-2">{% trans "Expected Columns (case-insensitive):" %}</p>
+                <div class="grid grid-cols-2 gap-1 text-xs text-info font-mono">
+                    <span>S.N</span><span>COMPANY NAME</span>
+                    <span>TRADE LICENSE</span><span>EXPIRE DATE</span>
+                    <span>PASSPORT</span><span>PASSPORT EXPIRY</span>
+                    <span>EID</span><span>EID EXPIRY</span>
+                    <span>COPY</span><span>TRN</span>
+                    <span>SECURITY CHEQUE</span><span>SALES PERSON</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Upload Form -->
+    <div class="card">
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                {% csrf_token %}
+                {{ form|crispy }}
+                
+                <div class="flex space-x-3">
+                    <a href="{% url 'customers:list' %}" class="btn btn-secondary">
+                        <i data-feather="x" class="w-4 h-4"></i>
+                        {% trans "Cancel" %}
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-feather="upload-cloud" class="w-4 h-4"></i>
+                        {% trans "Upload & Preview" %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

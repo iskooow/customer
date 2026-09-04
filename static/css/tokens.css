@@ -1,0 +1,90 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench (shell · Stat-Led dashboard) · design-system: design.md · designed-as-app */
+:root {
+  /* colour */
+  --color-paper:      oklch(0.99 0.002 242);
+  --color-paper-2:    oklch(0.97 0.004 242);
+  --color-ink:        oklch(0.22 0.024 248);
+  --color-ink-2:      oklch(0.45 0.02 246);
+  --color-rule:       oklch(0.90 0.006 242);
+  --color-rule-2:     oklch(0.85 0.008 242);
+  --color-muted:      oklch(0.55 0.016 246);
+  --color-accent:     oklch(0.588 0.158 242);
+  --color-accent-ink: oklch(0.99 0 0);
+  --color-focus:      oklch(0.707 0.165 254.624);
+
+  --color-success:    oklch(0.62 0.13 155);
+  --color-warning:    oklch(0.75 0.15 80);
+  --color-danger:     oklch(0.58 0.19 25);
+  --color-info:       oklch(0.60 0.12 240);
+
+  /* type */
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+  --font-body:    "Inter", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* space */
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs:  0.75rem;
+  --space-sm:  1rem;
+  --space-md:  1.5rem;
+  --space-lg:  2rem;
+  --space-xl:  3rem;
+  --space-2xl: 4.5rem;
+  --space-3xl: 7rem;
+
+  /* text */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.25rem;
+  --text-display: clamp(2rem, 3vw + 0.75rem, 3.25rem);
+
+  /* motion */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short:  150ms;
+  --dur-md:     220ms;
+
+  /* radius */
+  --radius-card: 8px;
+  --radius-input: 6px;
+  --radius-pill: 999px;
+
+  /* shadow */
+  --shadow-sm: 0 1px 2px oklch(0.22 0.024 248 / 0.04);
+  --shadow-md: 0 4px 12px oklch(0.22 0.024 248 / 0.06);
+}
+
+/* base */
+*, ::before, ::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* focus — keyboard-only, always visible, never removed */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

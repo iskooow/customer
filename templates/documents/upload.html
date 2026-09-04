@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% trans "Upload Document" %} - {{ customer.company_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">
+                <a href="{% url 'customers:detail' customer.pk %}" class="text-muted hover:text-accent transition-colors duration-short">{{ customer.company_name }}</a>
+                <span class="mx-1 text-rule2">/</span>
+                {% trans "Upload" %}
+            </p>
+            <h1 class="page-title">{% trans "Upload Document" %}</h1>
+            <p class="page-subtitle mt-1">{{ customer.company_name }}</p>
+        </div>
+        <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back" %}
+        </a>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink">{% trans "Document Details" %}</h2>
+            </div>
+            <div class="card-body">
+                {{ form|crispy }}
+            </div>
+        </div>
+        
+        <!-- Submit -->
+        <div class="flex space-x-3 justify-end">
+            <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-secondary">
+                <i data-feather="x" class="w-4 h-4"></i>
+                {% trans "Cancel" %}
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-feather="upload" class="w-4 h-4"></i>
+                {% trans "Upload Document" %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

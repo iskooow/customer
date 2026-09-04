@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Documents" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Vault" %} · {{ page_obj.paginator.count|default:"0" }} {% trans "files" %}</p>
+            <h1 class="page-title">{% trans "Documents" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Manage all customer documents" %}</p>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card">
+        <div class="card-body">
+            <form method="get" class="flex flex-col sm:flex-row gap-4 flex-wrap">
+                <div class="flex-1 min-w-[250px]">
+                    <label class="form-label">{% trans "Search" %}</label>
+                    <div class="relative">
+                        <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-rule2"></i>
+                        <input type="search" name="search" value="{{ search|default:'' }}" 
+                               placeholder="{% trans 'Search by file name, customer, notes...' %}"
+                               class="form-input pl-10"
+                               oninput="clearTimeout(this._t);this._t=setTimeout(()=>this.form.submit(),300)">
+                    </div>
+                </div>
+                <div class="min-w-[200px]">
+                    <label class="form-label">{% trans "Document Type" %}</label>
+                    <select name="type" class="form-select" onchange="this.form.submit()">
+                        <option value="">{% trans "All Types" %}</option>
+                        {% for value, label in doc_types %}
+                            <option value="{{ value }}" {% if current_type == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="min-w-[180px]">
+                    <label class="form-label">{% trans "Sort by" %}</label>
+                    <select name="sort" class="form-select" onchange="this.form.submit()">
+                        <option value="-uploaded_at" {% if sort == '-uploaded_at' %}selected{% endif %}>{% trans "Newest Upload" %}</option>
+                        <option value="uploaded_at" {% if sort == 'uploaded_at' %}selected{% endif %}>{% trans "Oldest Upload" %}</option>
+                        <option value="file_name" {% if sort == 'file_name' %}selected{% endif %}>{% trans "File Name (A–Z)" %}</option>
+                        <option value="-file_name" {% if sort == '-file_name' %}selected{% endif %}>{% trans "File Name (Z–A)" %}</option>
+                        <option value="customer__company_name" {% if sort == 'customer__company_name' %}selected{% endif %}>{% trans "Customer (A–Z)" %}</option>
+                        <option value="-customer__company_name" {% if sort == '-customer__company_name' %}selected{% endif %}>{% trans "Customer (Z–A)" %}</option>
+                        <option value="document_type" {% if sort == 'document_type' %}selected{% endif %}>{% trans "Type (A–Z)" %}</option>
+                        <option value="-document_type" {% if sort == '-document_type' %}selected{% endif %}>{% trans "Type (Z–A)" %}</option>
+                        <option value="expiry_date" {% if sort == 'expiry_date' %}selected{% endif %}>{% trans "Expiry (Soonest)" %}</option>
+                        <option value="-expiry_date" {% if sort == '-expiry_date' %}selected{% endif %}>{% trans "Expiry (Latest)" %}</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <a href="{% url 'documents:list' %}" class="btn btn-secondary">
+                        <i data-feather="x" class="w-4 h-4"></i>
+                        {% trans "Clear" %}
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Documents Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            {% with s=sort|default:"-uploaded_at" %}
+                            {% trans "File Name" as lbl_file %}
+                            {% trans "Customer" as lbl_customer %}
+                            {% trans "Type" as lbl_type %}
+                            {% trans "Expiry Date" as lbl_expiry %}
+                            {% trans "Uploaded By" as lbl_uploaded_by %}
+                            {% trans "Uploaded Date" as lbl_uploaded %}
+                            <th>
+                                <a href="?sort={% if s == 'file_name' %}-file_name{% else %}file_name{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}"
+                                   class="inline-flex items-center gap-1 no-underline {% if s == 'file_name' or s == '-file_name' %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}">
+                                    {{ lbl_file }}
+                                    {% if s == 'file_name' %}<i data-feather="chevron-up" class="w-3 h-3"></i>{% elif s == '-file_name' %}<i data-feather="chevron-down" class="w-3 h-3"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?sort={% if s == 'customer__company_name' %}-customer__company_name{% else %}customer__company_name{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}"
+                                   class="inline-flex items-center gap-1 no-underline {% if s == 'customer__company_name' or s == '-customer__company_name' %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}">
+                                    {{ lbl_customer }}
+                                    {% if s == 'customer__company_name' %}<i data-feather="chevron-up" class="w-3 h-3"></i>{% elif s == '-customer__company_name' %}<i data-feather="chevron-down" class="w-3 h-3"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?sort={% if s == 'document_type' %}-document_type{% else %}document_type{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}"
+                                   class="inline-flex items-center gap-1 no-underline {% if s == 'document_type' or s == '-document_type' %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}">
+                                    {{ lbl_type }}
+                                    {% if s == 'document_type' %}<i data-feather="chevron-up" class="w-3 h-3"></i>{% elif s == '-document_type' %}<i data-feather="chevron-down" class="w-3 h-3"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="hidden md:table-cell">
+                                <a href="?sort={% if s == 'expiry_date' %}-expiry_date{% else %}expiry_date{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}"
+                                   class="inline-flex items-center gap-1 no-underline {% if s == 'expiry_date' or s == '-expiry_date' %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}">
+                                    {{ lbl_expiry }}
+                                    {% if s == 'expiry_date' %}<i data-feather="chevron-up" class="w-3 h-3"></i>{% elif s == '-expiry_date' %}<i data-feather="chevron-down" class="w-3 h-3"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="hidden md:table-cell">
+                                <a href="?sort={% if s == 'uploaded_by__username' %}-uploaded_by__username{% else %}uploaded_by__username{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}"
+                                   class="inline-flex items-center gap-1 no-underline {% if s == 'uploaded_by__username' or s == '-uploaded_by__username' %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}">
+                                    {{ lbl_uploaded_by }}
+                                    {% if s == 'uploaded_by__username' %}<i data-feather="chevron-up" class="w-3 h-3"></i>{% elif s == '-uploaded_by__username' %}<i data-feather="chevron-down" class="w-3 h-3"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="hidden md:table-cell">
+                                <a href="?sort={% if s == 'uploaded_at' %}-uploaded_at{% else %}uploaded_at{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}"
+                                   class="inline-flex items-center gap-1 no-underline {% if s == 'uploaded_at' or s == '-uploaded_at' %}text-ink-2 font-semibold{% else %}text-muted hover:text-ink-2{% endif %}">
+                                    {{ lbl_uploaded }}
+                                    {% if s == 'uploaded_at' %}<i data-feather="chevron-up" class="w-3 h-3"></i>{% elif s == '-uploaded_at' %}<i data-feather="chevron-down" class="w-3 h-3"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>{% trans "Actions" %}</th>
+                            {% endwith %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in page_obj %}
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    {% if doc.is_pdf %}
+                                        <i data-feather="file" class="w-6 h-6 text-danger"></i>
+                                    {% elif doc.is_image %}
+                                        <i data-feather="image" class="w-6 h-6 text-success"></i>
+                                    {% else %}
+                                        <i data-feather="file-text" class="w-6 h-6 text-muted"></i>
+                                    {% endif %}
+                                    <div>
+                                        <p class="font-medium">{{ doc.file_name }}</p>
+                                        <p class="text-xs text-muted">{{ doc.get_file_size_display }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="font-medium">{{ doc.customer.company_name }}</td>
+                            <td>
+                                <span class="badge badge-gray">{{ doc.get_document_type_display }}</span>
+                            </td>
+                            <td class="hidden md:table-cell">
+                                {% if doc.expiry_date %}
+                                    {{ doc.expiry_date|date:"d M Y" }}
+                                    {% if doc.get_expiry_status %}
+                                        <span class="badge {{ doc.get_expiry_status.css_class }} ml-1">{{ doc.get_expiry_status.label }}</span>
+                                    {% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td class="hidden md:table-cell">{{ doc.uploaded_by.get_full_name|default:"—" }}</td>
+                            <td class="hidden md:table-cell">{{ doc.uploaded_at|date:"d M Y H:i" }}</td>
+                            <td>
+                                <div class="flex items-center gap-1">
+                                    <a href="{% url 'documents:view' doc.pk %}" target="_blank" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'View' %}">
+                                        <i data-feather="eye" class="w-4 h-4"></i>
+                                    </a>
+                                    <a href="{% url 'documents:download' doc.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Download' %}">
+                                        <i data-feather="download" class="w-4 h-4"></i>
+                                    </a>
+                                    <a href="{% url 'documents:edit' doc.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Edit' %}">
+                                        <i data-feather="edit" class="w-4 h-4"></i>
+                                    </a>
+                                    {% if user.is_admin_user %}
+                                    <form action="{% url 'documents:delete' doc.pk %}" method="post" class="inline"
+                                          onsubmit="return confirm('{% trans 'Are you sure you want to delete this document?' %}')">
+                                        {% csrf_token %}
+                                        <button type="submit" class="p-2 text-danger hover:text-danger hover:bg-danger/10 rounded-lg" title="{% trans 'Delete' %}">
+                                            <i data-feather="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="py-0">
+                                <div class="empty-state">
+                                    <div class="empty-icon">
+                                        <i data-feather="file-text"></i>
+                                    </div>
+                                    <h3 class="empty-title">{% trans "No documents found" %}</h3>
+                                    <p class="empty-hint">{% trans "Try adjusting your search, or upload a document from a customer record." %}</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-muted">
+                {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ page_obj.paginator.count }} {% trans "documents" %}
+            </div>
+            <div class="flex space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+                {% endif %}
+                <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

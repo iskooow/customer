@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Security Cheques" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Ledger" %} · {{ page_obj.paginator.count }} {% trans "cheques" %}</p>
+            <h1 class="page-title">{% trans "Security Cheques" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Manage all security cheques" %}</p>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card">
+        <div class="card-body">
+            <span id="filter-spinner" class="htmx-indicator"></span>
+            <form method="get" hx-get="{% url 'security_cheques:list' %}" hx-target="#cheques-table" hx-indicator="#filter-spinner" class="flex flex-col sm:flex-row gap-4">
+                <div class="min-w-[200px]">
+                    <label class="form-label">{% trans "Status" %}</label>
+                    <select name="status" class="form-select" hx-get="{% url 'security_cheques:list' %}" hx-trigger="change" hx-target="#cheques-table" hx-indicator="#filter-spinner">
+                        <option value="">{% trans "All Statuses" %}</option>
+                        {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex-1 min-w-[250px]">
+                    <label class="form-label">{% trans "Search" %}</label>
+                    <div class="relative">
+                        <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-rule2"></i>
+                        <input type="search" name="search" value="{{ search|default:'' }}" placeholder="{% trans 'Search by company, cheque number...' %}" class="form-input pl-10 pr-10"
+                               hx-get="{% url 'security_cheques:list' %}"
+                               hx-trigger="keyup changed delay:300ms"
+                               hx-target="#cheques-table"
+                               hx-indicator="#search-spinner">
+                        <span id="search-spinner" class="htmx-indicator absolute right-3 top-1/2 -translate-y-1/2 hidden"></span>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Cheques Table -->
+    <div class="card" id="cheques-table">
+        {% include 'security_cheques/partials/table.html' %}
+    </div>
+</div>
+{% endblock %}

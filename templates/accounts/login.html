@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Sign In" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-[70vh]">
+    <div class="w-full max-w-md">
+        <div class="card">
+            <div class="card-body p-8">
+                <div class="text-center mb-8">
+                    <img src="{{ company_logo_url }}" alt="KB Remicon Logo" class="mx-auto mb-4 h-16 w-16 rounded-card shadow-sm object-contain">
+                    <h1 class="font-display text-2xl font-semibold tracking-tight text-ink">{% trans "Sign In" %}</h1>
+                    <p class="text-sm text-muted mt-2">{% trans "Access your customer records" %}</p>
+                </div>
+
+                <form method="post" class="space-y-5">
+                    {% csrf_token %}
+
+                    {% if form.errors %}
+                    <div class="p-3 rounded-card bg-danger/10 border border-danger/20 text-danger text-sm">
+                        {% trans "Invalid email or password. Please try again." %}
+                    </div>
+                    {% endif %}
+
+                    <div>
+                        <label for="id_username" class="form-label">{% trans "Email" %}</label>
+                        <input type="email" name="username" id="id_username" class="form-input"
+                               placeholder="user@example.com" required autofocus>
+                    </div>
+
+                    <div>
+                        <label for="id_password" class="form-label">{% trans "Password" %}</label>
+                        <input type="password" name="password" id="id_password" class="form-input"
+                               placeholder="••••••••" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full">
+                        {% trans "Sign In" %}
+                    </button>
+                </form>
+
+                <div class="mt-6 text-center">
+                    <p class="text-sm text-muted">
+                        {% trans "Don't have an account?" %}
+                        <a href="{% url 'accounts:register' %}" class="text-accent font-medium hover:underline">{% trans "Register" %}</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

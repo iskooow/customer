@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Import Preview" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Registry" %} / {% trans "Import" %} / {% trans "Preview" %}</p>
+            <h1 class="page-title">{% trans "Import Preview" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Review the data before importing" %}</p>
+        </div>
+        <a href="{% url 'customers:import' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back" %}
+        </a>
+    </div>
+    
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-ink">{{ preview.total_rows }}</p>
+                <p class="text-sm text-muted">{% trans "Total Rows" %}</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-success">{{ preview.valid_rows|length }}</p>
+                <p class="text-sm text-muted">{% trans "Valid" %}</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-warning">{{ preview.duplicates }}</p>
+                <p class="text-sm text-muted">{% trans "Duplicates" %}</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body text-center">
+                <p class="text-3xl font-bold text-danger">{{ preview.errors|length }}</p>
+                <p class="text-sm text-muted">{% trans "Errors" %}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Errors -->
+    {% if preview.errors %}
+    <div class="card border-l-4 border-danger">
+        <div class="card-header">
+            <h2 class="text-lg font-semibold text-danger flex items-center">
+                <i data-feather="alert-circle" class="w-5 h-5"></i>
+                {% trans "Validation Errors" %}
+            </h2>
+        </div>
+        <div class="card-body">
+            <ul class="space-y-1 max-h-60 overflow-y-auto">
+                {% for error in preview.errors %}
+                <li class="text-danger text-sm flex items-start gap-2">
+                    <i data-feather="x-circle" class="w-4 h-4 mt-0.5 flex-shrink-0"></i>
+                    <span>{{ error }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Valid Records Preview -->
+    {% if preview.valid_rows %}
+    <div class="card">
+        <div class="card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 class="text-lg font-semibold text-ink">{% trans "Valid Records to Import" %}</h2>
+            <span class="badge badge-success">{{ preview.valid_rows|length }} {% trans "records" %}</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "S.N" %}</th>
+                            <th>{% trans "Company Name" %}</th>
+                            <th>{% trans "Trade License" %}</th>
+                            <th>{% trans "TL Expiry" %}</th>
+                            <th>{% trans "Passport" %}</th>
+                            <th>{% trans "PP Expiry" %}</th>
+                            <th>{% trans "EID" %}</th>
+                            <th>{% trans "EID Expiry" %}</th>
+                            <th>{% trans "TRN" %}</th>
+                            <th>{% trans "Sales Person" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in preview.valid_rows %}
+                        <tr>
+                            <td class="text-muted">{{ forloop.counter }}</td>
+                            <td class="font-medium">{{ row.company_name }}</td>
+                            <td>{{ row.trade_license_number|default:"-" }}</td>
+                            <td>{{ row.trade_license_expiry|date:"d/m/Y"|default:"-" }}</td>
+                            <td>{{ row.passport_number|default:"-" }}</td>
+                            <td>{{ row.passport_expiry|date:"d/m/Y"|default:"-" }}</td>
+                            <td>{{ row.eid_number|default:"-" }}</td>
+                            <td>{{ row.eid_expiry|date:"d/m/Y"|default:"-" }}</td>
+                            <td>{{ row.trn|default:"-" }}</td>
+                            <td>{{ row.sales_person.name|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Actions -->
+    <div class="card">
+        <div class="card-body">
+            <form method="post" class="flex space-x-3 justify-end">
+                {% csrf_token %}
+                <a href="{% url 'customers:import' %}" class="btn btn-secondary">
+                    <i data-feather="x" class="w-4 h-4"></i>
+                    {% trans "Cancel" %}
+                </a>
+                <button type="submit" name="confirm" value="1" class="btn btn-primary">
+                    <i data-feather="check" class="w-4 h-4"></i>
+                    {% trans "Import {{ preview.valid_rows|length }} Records" %}
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

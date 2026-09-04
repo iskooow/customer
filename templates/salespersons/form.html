@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if form.instance.pk %}{% trans "Edit Sales Person" %}{% else %}{% trans "Add Sales Person" %}{% endif %} - Sales Persons{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">
+                <a href="{% url 'salespersons:list' %}" class="text-muted hover:text-accent transition-colors duration-short">{% trans "Sales Persons" %}</a>
+                <span class="mx-1 text-rule2">/</span>
+                {% if form.instance.pk %}{% trans "Edit" %}{% else %}{% trans "Add" %}{% endif %}
+            </p>
+            <h1 class="page-title">
+                {% if form.instance.pk %}{% trans "Edit Sales Person" %}{% else %}{% trans "Add Sales Person" %}{% endif %}
+            </h1>
+            <p class="page-subtitle mt-1">
+                {% if form.instance.pk %}{% trans "Update sales person information" %}{% else %}{% trans "Fill in the sales person details below" %}{% endif %}
+            </p>
+        </div>
+        <a href="{% url 'salespersons:list' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back to List" %}
+        </a>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink">{% trans "Sales Person Information" %}</h2>
+            </div>
+            <div class="card-body">
+                {{ form|crispy }}
+            </div>
+        </div>
+        
+        <!-- Submit Buttons -->
+        <div class="flex space-x-3 justify-end">
+            <a href="{% url 'salespersons:list' %}" class="btn btn-secondary">
+                <i data-feather="x" class="w-4 h-4"></i>
+                {% trans "Cancel" %}
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-feather="save" class="w-4 h-4"></i>
+                {% trans "Save Sales Person" %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

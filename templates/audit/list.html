@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Audit Logs" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Activity" %}</p>
+            <h1 class="page-title">{% trans "Audit Logs" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Track all system activities and changes" %}</p>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card">
+        <div class="card-body">
+            <form method="get" class="flex flex-col sm:flex-row gap-4">
+                <div class="flex-1 min-w-[250px]">
+                    <label class="form-label">{% trans "Search" %}</label>
+                    <div class="relative">
+                        <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-rule2"></i>
+                        <input type="search" name="search" value="{{ search|default:'' }}" 
+                               placeholder="{% trans 'Search by description, user, customer...' %}"
+                               class="form-input pl-10">
+                    </div>
+                </div>
+                <div class="min-w-[200px]">
+                    <label class="form-label">{% trans "Action" %}</label>
+                    <select name="action" class="form-select">
+                        <option value="">{% trans "All Actions" %}</option>
+                        {% for value, label in action_choices %}
+                            <option value="{{ value }}" {% if current_action == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="min-w-[200px]">
+                    <label class="form-label">{% trans "Date From" %}</label>
+                    <input type="date" name="date_from" value="{{ date_from|default:'' }}" class="form-input">
+                </div>
+                <div class="min-w-[200px]">
+                    <label class="form-label">{% trans "Date To" %}</label>
+                    <input type="date" name="date_to" value="{{ date_to|default:'' }}" class="form-input">
+                </div>
+                <div class="flex items-end">
+                    <a href="{% url 'audit:list' %}" class="btn btn-secondary">
+                        <i data-feather="x" class="w-4 h-4"></i>
+                        {% trans "Clear" %}
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Audit Log Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th class="w-32">{% trans "Time" %}</th>
+                            <th class="min-w-[150px]">{% trans "User" %}</th>
+                            <th class="min-w-[150px]">{% trans "Action" %}</th>
+                            <th class="min-w-[200px]">{% trans "Customer" %}</th>
+                            <th>{% trans "Description" %}</th>
+                            <th class="hidden lg:table-cell">{% trans "IP Address" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in page_obj %}
+                        <tr>
+                            <td class="whitespace-nowrap text-muted">{{ log.timestamp|date:"d M Y H:i" }}</td>
+                            <td>
+                                {% if log.user %}
+                                    <div class="font-medium">{{ log.user.get_full_name|default:log.user.email }}</div>
+                                    <div class="text-xs text-muted">{{ log.user.get_role_display }}</div>
+                                {% else %}
+                                    <span class="text-rule2">{% trans "System" %}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-gray">{{ log.get_action_display }}</span>
+                            </td>
+                            <td>
+                                {% if log.customer %}
+                                    <a href="{% url 'customers:detail' log.customer.pk %}" class="font-medium text-accent hover:text-accent">
+                                        {{ log.customer.company_name }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-rule2">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="max-w-md">{{ log.description }}</td>
+                            <td class="hidden lg:table-cell text-sm text-muted font-mono">{{ log.ip_address|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="py-0">
+                                <div class="empty-state">
+                                    <div class="empty-icon">
+                                        <i data-feather="activity"></i>
+                                    </div>
+                                    <h3 class="empty-title">{% trans "No audit logs found" %}</h3>
+                                    <p class="empty-hint">{% trans "System activity will appear here as records change." %}</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-muted">
+                {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ page_obj.paginator.count }} {% trans "logs" %}
+            </div>
+            <div class="flex space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-secondary btn-sm"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+                {% endif %}
+                <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-secondary btn-sm"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

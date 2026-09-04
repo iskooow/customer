@@ -1,0 +1,97 @@
+{% load i18n %}
+
+<div class="card-body p-0">
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th class="w-12">{% trans "S.N" %}</th>
+                    <th class="min-w-[200px]">{% trans "Company" %}</th>
+                    <th>{% trans "Status" %}</th>
+                    <th>{% trans "Cheque #" %}</th>
+                    <th class="hidden md:table-cell">{% trans "Amount" %}</th>
+                    <th class="hidden md:table-cell">{% trans "Date" %}</th>
+                    <th>{% trans "Copy" %}</th>
+                    <th class="hidden md:table-cell">{% trans "Sales Person" %}</th>
+                    <th class="hidden md:table-cell">{% trans "Created" %}</th>
+                    <th>{% trans "Actions" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cheque in page_obj %}
+                <tr>
+                    <td class="text-muted font-mono">{{ forloop.counter }}</td>
+                    <td class="font-medium">{{ cheque.customer.company_name }}</td>
+                    <td>
+                        <span class="badge
+                                    {% if cheque.status == 'received' %}badge-success
+                                    {% elif cheque.status == 'pending' %}badge-warning
+                                    {% elif cheque.status == 'returned' %}badge-info
+                                    {% else %}badge-danger{% endif %}">
+                                    {{ cheque.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="font-mono">{{ cheque.cheque_number|default:"—" }}</td>
+                    <td class="hidden md:table-cell">{{ cheque.amount|floatformat:2|default:"—" }} AED</td>
+                    <td class="hidden md:table-cell">{{ cheque.cheque_date|date:"d M Y"|default:"—" }}</td>
+                    <td>
+                        {% if cheque.file %}<i data-feather="check-circle" class="w-5 h-5 text-success"></i>{% else %}<i data-feather="x-circle" class="w-5 h-5 text-danger"></i>{% endif %}
+                    </td>
+                    <td class="hidden md:table-cell">{{ cheque.customer.sales_person.name|default:"—" }}</td>
+                    <td class="hidden md:table-cell">{{ cheque.created_at|date:"d M Y" }}</td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <a href="{% url 'customers:detail' cheque.customer.pk %}" class="text-accent hover:text-accent text-sm font-medium">
+                                {% trans "View" %}
+                            </a>
+                            {% if cheque.file %}
+                            <a href="{% url 'security_cheques:download' cheque.pk %}" class="p-2 text-muted hover:text-ink-2 hover:bg-paper2 rounded-lg" title="{% trans 'Download' %}">
+                                <i data-feather="download" class="w-4 h-4"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-12">
+                        <i data-feather="credit-card" class="w-16 h-16 mx-auto text-rule2 mb-4"></i>
+                        <p class="text-muted">{% trans "No security cheques found" %}</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="text-sm text-muted">
+        {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ total_count }} {% trans "cheques" %}
+    </div>
+    <div class="flex space-x-2">
+        {% if page_obj.has_previous %}
+            <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               class="btn btn-secondary btn-sm" aria-label="{% trans 'First page' %}"
+               hx-get="{% url 'reports:cheque_report' %}?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               hx-target="#cheques-table"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               class="btn btn-secondary btn-sm" aria-label="{% trans 'Previous page' %}"
+               hx-get="{% url 'reports:cheque_report' %}?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               hx-target="#cheques-table"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+        {% endif %}
+        <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               class="btn btn-secondary btn-sm" aria-label="{% trans 'Next page' %}"
+               hx-get="{% url 'reports:cheque_report' %}?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               hx-target="#cheques-table"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               class="btn btn-secondary btn-sm" aria-label="{% trans 'Last page' %}"
+               hx-get="{% url 'reports:cheque_report' %}?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value|urlencode }}{% endif %}{% endfor %}"
+               hx-target="#cheques-table"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

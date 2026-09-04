@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load custom_filters %}
+
+{% block title %}{% trans "Salesperson Report" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Reports" %} / {% trans "Sales" %}</p>
+            <h1 class="page-title">{% trans "Salesperson Report" %}</h1>
+            {% if show_customer_table and selected_sales_person %}
+            <p class="page-subtitle mt-1">{% trans "Customer compliance for" %} <span class="font-semibold">{{ selected_sales_person.name }}</span> &mdash; <span class="font-mono font-semibold">{{ total_count }}</span> {% trans "customers" %}</p>
+            {% else %}
+            <p class="page-subtitle mt-1">{% trans "Performance overview of all sales persons" %}</p>
+            {% endif %}
+        </div>
+        <div class="page-actions">
+            {% if show_customer_table %}
+            <a href="?salesperson_id={{ selected_sales_person.pk }}&format=excel" class="btn btn-success">
+                <i data-feather="download" class="w-4 h-4"></i>
+                {% trans "Export Excel" %}
+            </a>
+            <a href="?salesperson_id={{ selected_sales_person.pk }}&format=pdf" class="btn btn-secondary">
+                <i data-feather="file" class="w-4 h-4"></i>
+                {% trans "Export PDF" %}
+            </a>
+            {% endif %}
+            <button onclick="window.print()" class="btn btn-secondary">
+                <i data-feather="printer" class="w-4 h-4"></i>
+                {% trans "Print" %}
+            </button>
+        </div>
+    </div>
+
+    <!-- Salesperson Selection -->
+    <div class="card">
+        <div class="card-body px-6 py-3">
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="text-sm text-muted mr-1">{% trans "Sales Person:" %}</span>
+                <a href="{% url 'reports:salesperson_report' %}" class="btn {% if not show_customer_table %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                    {% trans "All Sales Persons" %}
+                </a>
+                {% for sp in salespersons %}
+                <a href="{% url 'reports:salesperson_report' %}?salesperson_id={{ sp.pk }}" class="btn {% if selected_sales_person.pk == sp.pk %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                    {{ sp.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {% if show_customer_table and selected_sales_person %}
+    <!-- Customer Compliance Table Mode -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-container">
+                <table class="table" style="min-width: 1000px;">
+                    <thead>
+                        <tr>
+                            <th class="w-12">{% trans "S.N" %}</th>
+                            <th class="min-w-[200px]">{% trans "Company" %}</th>
+                            <th>{% trans "Trade License" %}</th>
+                            <th>{% trans "Passport" %}</th>
+                            <th>{% trans "Emirates ID" %}</th>
+                            <th>{% trans "Copy Status" %}</th>
+                            <th>{% trans "Action" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for customer in page_obj %}
+                        <tr>
+                            <td class="text-muted font-mono">{{ forloop.counter }}</td>
+                            <td class="font-medium">{{ customer.company_name }}</td>
+                            <td>
+                                {% if customer.documents.filter|document_type:"trade_license"|exists %}
+                                    {% if customer.tl_status == 'valid' %}
+                                        <span class="badge badge-success">{% trans "Valid" %} ({{ customer.tl_days_left }}{% trans "d" %})</span>
+                                    {% elif customer.tl_status == 'expiring_soon' %}
+                                        <span class="badge badge-warning">{% trans "Expiring" %} ({{ customer.tl_days_left }}{% trans "d" %})</span>
+                                    {% elif customer.tl_status == 'urgent' %}
+                                        <span class="badge badge-danger">{% trans "Urgent" %} ({{ customer.tl_days_left }}{% trans "d" %})</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">{% trans "Expired" %}</span>
+                                    {% endif %}
+                                {% else %}<span class="text-muted">{% trans "—" %}</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if customer.documents.filter|document_type:"passport"|exists %}
+                                    {% if customer.pp_status == 'valid' %}
+                                        <span class="badge badge-success">{% trans "Valid" %} ({{ customer.pp_days_left }}{% trans "d" %})</span>
+                                    {% elif customer.pp_status == 'expiring_soon' %}
+                                        <span class="badge badge-warning">{% trans "Expiring" %} ({{ customer.pp_days_left }}{% trans "d" %})</span>
+                                    {% elif customer.pp_status == 'urgent' %}
+                                        <span class="badge badge-danger">{% trans "Urgent" %} ({{ customer.pp_days_left }}{% trans "d" %})</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">{% trans "Expired" %}</span>
+                                    {% endif %}
+                                {% else %}<span class="text-muted">{% trans "—" %}</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if customer.documents.filter|document_type:"emirates_id"|exists %}
+                                    {% if customer.eid_status == 'valid' %}
+                                        <span class="badge badge-success">{% trans "Valid" %} ({{ customer.eid_days_left }}{% trans "d" %})</span>
+                                    {% elif customer.eid_status == 'expiring_soon' %}
+                                        <span class="badge badge-warning">{% trans "Expiring" %} ({{ customer.eid_days_left }}{% trans "d" %})</span>
+                                    {% elif customer.eid_status == 'urgent' %}
+                                        <span class="badge badge-danger">{% trans "Urgent" %} ({{ customer.eid_days_left }}{% trans "d" %})</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">{% trans "Expired" %}</span>
+                                    {% endif %}
+                                {% else %}<span class="text-muted">{% trans "—" %}</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if customer.copy_status == 'complete' %}<span class="badge badge-success">{% trans "Complete" %}</span>
+                                {% elif customer.copy_status == 'partial' %}<span class="badge badge-warning">{% trans "Partial" %}</span>
+                                {% else %}<span class="badge badge-danger">{% trans "Missing" %}</span>{% endif %}
+                            </td>
+                            <td><a href="{% url 'customers:detail' customer.pk %}" class="text-accent text-sm font-medium">{% trans "View" %}</a></td>
+        {% empty %}
+        <tr>
+            <td colspan="7" class="text-center py-12">
+                <i data-feather="users" class="w-16 h-16 mx-auto text-rule2 mb-4"></i>
+                <p class="text-muted">{% trans "No customers found for this salesperson" %}</p>
+            </td>
+        </tr>
+        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-muted">
+                {% trans "Showing" %} {{ page_obj.start_index }} - {{ page_obj.end_index }} {% trans "of" %} {{ total_count }} {% trans "customers" %}
+            </div>
+            <div class="flex space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?salesperson_id={{ selected_sales_person.pk }}&page=1" class="btn btn-secondary btn-sm"><i data-feather="chevrons-left" class="w-4 h-4"></i></a>
+                    <a href="?salesperson_id={{ selected_sales_person.pk }}&page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm"><i data-feather="chevron-left" class="w-4 h-4"></i></a>
+                {% endif %}
+                <span class="flex items-center px-3 text-sm text-ink-2">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?salesperson_id={{ selected_sales_person.pk }}&page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm"><i data-feather="chevron-right" class="w-4 h-4"></i></a>
+                    <a href="?salesperson_id={{ selected_sales_person.pk }}&page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm"><i data-feather="chevrons-right" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <!-- Card Overview Mode -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for sp in salespersons %}
+        <div class="card hover:shadow-md transition-shadow">
+            <div class="card-header">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-ink">{{ sp.name }}</h3>
+                    <span class="badge {% if sp.active %}badge-success{% else %}badge-gray{% endif %}">
+                        {% if sp.active %}{% trans "Active" %}{% else %}{% trans "Inactive" %}{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <p class="text-3xl font-bold text-accent">{{ sp.customer_count }}</p>
+                        <p class="text-sm text-muted">{% trans "Customers" %}</p>
+                    </div>
+                    <div>
+                        <p class="text-3xl font-bold text-danger">{{ sp.expired_docs }}</p>
+                        <p class="text-sm text-muted">{% trans "Expired Docs" %}</p>
+                    </div>
+                    <div>
+                        <p class="text-3xl font-bold text-warning">{{ sp.expiring_soon }}</p>
+                        <p class="text-sm text-muted">{% trans "Expiring (30d)" %}</p>
+                    </div>
+                    <div>
+                        <p class="text-3xl font-bold text-info">{{ sp.pending_cheques }}</p>
+                        <p class="text-sm text-muted">{% trans "Pending Cheques" %}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-3xl font-bold text-warning">{{ sp.missing_docs }}</p>
+                        <p class="text-sm text-muted">{% trans "Missing Docs" %}</p>
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-rule2">
+                    <a href="{% url 'reports:salesperson_report' %}?salesperson_id={{ sp.pk }}" class="btn btn-primary w-full">
+                        <i data-feather="eye" class="w-4 h-4"></i>
+                        {% trans "View Customers" %}
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full text-center py-12">
+            <i data-feather="users" class="w-16 h-16 mx-auto text-rule2 mb-4"></i>
+            <p class="text-muted">{% trans "No sales persons found" %}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

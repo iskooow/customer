@@ -1,0 +1,103 @@
+{% load i18n %}
+{% load static %}
+
+<!-- Table Header (Sticky) -->
+<div class="overflow-hidden">
+    <table class="table" style="min-width: 1400px;">
+        <thead>
+            <tr>
+                <th class="w-10">{% trans "S.N" %}</th>
+                {% with s=sort|default:'-created_at' %}
+                {% trans 'Company' as lbl_company %}
+                {% trans 'Trade License' as lbl_tl %}
+                {% trans 'Expiry' as lbl_expiry %}
+                {% trans 'Passport Expiry' as lbl_passport_expiry %}
+                {% trans 'EID Expiry' as lbl_eid_expiry %}
+                {% trans 'Copy' as lbl_copy %}
+                {% trans 'Sales Person' as lbl_sp %}
+                {% include 'customers/partials/sortable_th.html' with field_name='company_name' label=lbl_company %}
+                {% include 'customers/partials/sortable_th.html' with field_name='trade_license_number' label=lbl_tl %}
+                {% include 'customers/partials/sortable_th.html' with field_name='trade_license_expiry' label=lbl_expiry %}
+                <th class='num w-24'>{% trans 'Days' %}</th>
+                <th class='min-w-[120px]'>{% trans 'Passport' %}</th>
+                {% include 'customers/partials/sortable_th.html' with field_name='passport_expiry' label=lbl_passport_expiry %}
+                <th class='num w-24'>{% trans 'Days' %}</th>
+                <th class='min-w-[120px]'>{% trans 'EID' %}</th>
+                {% include 'customers/partials/sortable_th.html' with field_name='eid_expiry' label=lbl_eid_expiry %}
+                <th class='num w-24'>{% trans 'Days' %}</th>
+                {% include 'customers/partials/sortable_th.html' with field_name='copy_status' label=lbl_copy %}
+                <th class='min-w-[150px]'>{% trans 'TRN' %}</th>
+                <th class='min-w-[150px]'>{% trans 'Cheque' %}</th>
+                {% include 'customers/partials/sortable_th.html' with field_name='sales_person__name' label=lbl_sp %}
+                <th class='w-32 text-right'>{% trans 'Actions' %}</th>
+                {% endwith %}
+            </tr>
+        </thead>
+        <tbody id="customer-table-body">
+            {% for customer in customers %}
+            {% include 'customers/partials/customer_row.html' %}
+            {% empty %}
+            <tr>
+                <td colspan="15" class="py-0">
+                    <div class="empty-state">
+                        <div class="empty-icon">
+                            <i data-feather="users"></i>
+                        </div>
+                        <h3 class="empty-title">{% trans "No customers found" %}</h3>
+                        <p class="empty-hint">{% trans "Try adjusting your filters, or add a new customer to get started." %}</p>
+                        {% if user.is_admin_user %}
+                        <div class="empty-actions">
+                            <a href="{% url 'customers:add' %}" class="btn btn-primary btn-sm">
+                                <i data-feather="plus" class="w-4 h-4"></i>
+                                {% trans "Add Customer" %}
+                            </a>
+                            <a href="{% url 'customers:import' %}" class="btn btn-secondary btn-sm">
+                                <i data-feather="upload-cloud" class="w-4 h-4"></i>
+                                {% trans "Import" %}
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if is_paginated %}
+<div class="card-footer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="text-sm text-muted">
+        {% trans "Showing" %} <span class="font-mono font-semibold text-ink-2">{{ page_obj.start_index }}</span> – <span class="font-mono font-semibold text-ink-2">{{ page_obj.end_index }}</span> {% trans "of" %} <span class="font-mono font-semibold text-ink-2">{{ paginator.count }}</span> {% trans "customers" %}
+    </div>
+    <div class="flex items-center gap-2">
+        {% if page_obj.has_previous %}
+            <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="btn btn-secondary btn-sm" hx-get="{% url 'customers:list' %}?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" hx-target="#customer-table" aria-label="{% trans 'First page' %}">
+                <i data-feather="chevrons-left" class="w-4 h-4"></i>
+            </a>
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="btn btn-secondary btn-sm" hx-get="{% url 'customers:list' %}?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" hx-target="#customer-table" aria-label="{% trans 'Previous page' %}">
+                <i data-feather="chevron-left" class="w-4 h-4"></i>
+            </a>
+        {% endif %}
+        
+        <span class="inline-flex items-center gap-1.5 px-3 h-9 text-sm font-semibold text-ink-2 bg-paper-2 rounded-input border border-rule">
+            {% trans "Page" %}
+            <span class="font-mono">{{ page_obj.number }} / {{ paginator.num_pages }}</span>
+        </span>
+        
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="btn btn-secondary btn-sm" hx-get="{% url 'customers:list' %}?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" hx-target="#customer-table" aria-label="{% trans 'Next page' %}">
+                <i data-feather="chevron-right" class="w-4 h-4"></i>
+            </a>
+            <a href="?page={{ paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="btn btn-secondary btn-sm" hx-get="{% url 'customers:list' %}?page={{ paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" hx-target="#customer-table" aria-label="{% trans 'Last page' %}">
+                <i data-feather="chevrons-right" class="w-4 h-4"></i>
+            </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

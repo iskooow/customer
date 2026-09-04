@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% trans "Edit Profile" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Account" %} / {% trans "Edit" %}</p>
+            <h1 class="page-title">{% trans "Edit Profile" %}</h1>
+            <p class="page-subtitle mt-1">{% trans "Update your account information" %}</p>
+        </div>
+        <a href="{% url 'accounts:profile' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back" %}
+        </a>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink">{% trans "Company Logo" %}</h2>
+            </div>
+            <div class="card-body">
+                <div class="flex items-start gap-4">
+                    <div class="shrink-0">
+                        {% if form.instance.logo %}
+                            <img src="{{ form.instance.logo.url }}" alt="{% trans 'Current company logo' %}"
+                                 class="w-24 h-24 rounded-card object-contain border border-rule shadow-sm bg-paper">
+                        {% else %}
+                            <div class="w-24 h-24 rounded-card flex items-center justify-center border border-rule bg-paper2 text-muted">
+                                <i data-feather="image" class="w-10 h-10"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm text-muted mb-3">{% trans "Upload or update your company logo. Recommended: PNG or JPG, max 5 MB." %}</p>
+                        {{ form.logo }}
+                        {% if form.logo.errors %}
+                            <p class="text-danger text-sm mt-1">{{ form.logo.errors|join:" " }}</p>
+                        {% endif %}
+                        {% if form.logo.help_text %}
+                            <p class="text-xs text-muted mt-1">{{ form.logo.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink">{% trans "Personal Information" %}</h2>
+            </div>
+            <div class="card-body">
+                {% for field in form %}
+                    {% if field.name != 'logo' %}
+                        {{ field|as_crispy_field }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Submit -->
+        <div class="flex space-x-3 justify-end">
+            <a href="{% url 'accounts:profile' %}" class="btn btn-secondary">
+                <i data-feather="x" class="w-4 h-4"></i>
+                {% trans "Cancel" %}
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-feather="save" class="w-4 h-4"></i>
+                {% trans "Save Changes" %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

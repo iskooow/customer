@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if form.instance.pk %}{% trans "Edit Customer" %}{% else %}{% trans "Add Customer" %}{% endif %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">
+                <a href="{% url 'customers:list' %}" class="text-muted hover:text-accent transition-colors duration-short">{% trans "Customers" %}</a>
+                <span class="mx-1 text-rule2">/</span>
+                {% if form.instance.pk %}{% trans "Edit" %}{% else %}{% trans "Add" %}{% endif %}
+            </p>
+            <h1 class="page-title">
+                {% if form.instance.pk %}{% trans "Edit Customer" %}{% else %}{% trans "Add Customer" %}{% endif %}
+            </h1>
+            <p class="page-subtitle mt-1">
+                {% if form.instance.pk %}{% trans "Update customer information" %}{% else %}{% trans "Fill in the customer details below" %}{% endif %}
+            </p>
+        </div>
+        <a href="{% url 'customers:list' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back to List" %}
+        </a>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" enctype="multipart/form-data" class="space-y-6" novalidate>
+        {% csrf_token %}
+        
+        <!-- Company Information -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink flex items-center">
+                    <i data-feather="building" class="w-5 h-5 mr-2 text-accent"></i>
+                    {% trans "Company Information" %}
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div class="sm:col-span-2">
+                        {{ form.company_name|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.trade_license_number|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.trade_license_expiry|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.trn|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.sales_person|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.customer_status|as_crispy_field }}
+                    </div>
+                    <div class="sm:col-span-2">
+                        {{ form.notes|as_crispy_field }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Passport Information -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink flex items-center">
+                    <i data-feather="book" class="w-5 h-5 mr-2 text-info"></i>
+                    {% trans "Passport Information" %}
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        {{ form.passport_number|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.passport_expiry|as_crispy_field }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Emirates ID Information -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink flex items-center">
+                    <i data-feather="id-card" class="w-5 h-5 mr-2 text-success"></i>
+                    {% trans "Emirates ID Information" %}
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        {{ form.eid_number|as_crispy_field }}
+                    </div>
+                    <div>
+                        {{ form.eid_expiry|as_crispy_field }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Submit Buttons -->
+        <div class="card">
+            <div class="card-footer flex flex-col sm:flex-row sm:justify-end gap-3">
+                <a href="{% url 'customers:list' %}" class="btn btn-secondary">
+                    <i data-feather="x" class="w-4 h-4"></i>
+                    {% trans "Cancel" %}
+                </a>
+                <button type="submit" name="_addanother" value="1" class="btn btn-secondary">
+                    <i data-feather="plus-circle" class="w-4 h-4"></i>
+                    {% trans "Save & Add Another" %}
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i data-feather="save" class="w-4 h-4"></i>
+                    {% trans "Save Customer" %}
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% load i18n %}
+{% comment %}
+Sortable table header cell.
+
+Required context (provided by the including template):
+  s          - current sort value (e.g. "-company_name")
+  field_name - the order_by key for this column (e.g. "company_name")
+  label      - human-readable column name
+{% endcomment %}
+{% if s == field_name %}
+    {% with new_sort="-"|add:field_name ascending=True active=True %}
+    {% include 'customers/partials/sort_th_link.html' %}
+    {% endwith %}
+{% elif s == "-"|add:field_name %}
+    {% with new_sort=field_name ascending=False active=True %}
+    {% include 'customers/partials/sort_th_link.html' %}
+    {% endwith %}
+{% else %}
+    {% with new_sort=field_name ascending=False active=False %}
+    {% include 'customers/partials/sort_th_link.html' %}
+    {% endwith %}
+{% endif %}

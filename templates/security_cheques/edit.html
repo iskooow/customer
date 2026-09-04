@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% trans "Edit Security Cheque" %} - {{ cheque.customer.company_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">
+                <a href="{% url 'customers:detail' cheque.customer.pk %}" class="text-muted hover:text-accent transition-colors duration-short">{{ cheque.customer.company_name }}</a>
+                <span class="mx-1 text-rule2">/</span>
+                {% trans "Security Cheque" %}
+            </p>
+            <h1 class="page-title">{% trans "Edit Security Cheque" %}</h1>
+            <p class="page-subtitle mt-1">{{ cheque.cheque_number|default:"" }}</p>
+        </div>
+        <a href="{% url 'customers:detail' cheque.customer.pk %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back" %}
+        </a>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink">{% trans "Cheque Details" %}</h2>
+            </div>
+            <div class="card-body">
+                {{ form|crispy }}
+                
+                {% if cheque.file %}
+                <div class="mt-4 p-4 bg-paper2 rounded-lg">
+                    <p class="text-sm font-medium text-ink-2 mb-2">{% trans "Current File" %}</p>
+                    <div class="flex items-center gap-3">
+                        {% if cheque.is_pdf %}
+                            <i data-feather="file" class="w-8 h-8 text-danger"></i>
+                        {% elif cheque.is_image %}
+                            <i data-feather="image" class="w-8 h-8 text-success"></i>
+                        {% else %}
+                            <i data-feather="file-text" class="w-8 h-8 text-muted"></i>
+                        {% endif %}
+                        <div>
+                            <p class="font-medium">{{ cheque.file_name }}</p>
+                            <p class="text-sm text-muted">Uploaded {{ cheque.created_at|date:"d M Y H:i" }}</p>
+                        </div>
+                        <div class="ml-auto flex gap-2">
+                            <a href="{% url 'security_cheques:download' cheque.pk %}" class="btn btn-secondary btn-sm">
+                                <i data-feather="download" class="w-4 h-4"></i>
+                                {% trans "Download" %}
+                            </a>
+                        </div>
+                    </div>
+                    <p class="text-xs text-muted mt-2">{% trans "Upload a new file to replace the current one" %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Submit -->
+        <div class="flex space-x-3 justify-end">
+            <a href="{% url 'customers:detail' cheque.customer.pk %}" class="btn btn-secondary">
+                <i data-feather="x" class="w-4 h-4"></i>
+                {% trans "Cancel" %}
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-feather="save" class="w-4 h-4"></i>
+                {% trans "Save Changes" %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% trans "Edit User" %} - Customer Records{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <p class="page-eyebrow mb-1">{% trans "Access Control" %} / {% trans "Edit" %}</p>
+            <h1 class="page-title">{% trans "Edit User" %}</h1>
+            <p class="page-subtitle mt-1">{{ user_obj.get_full_name|default:user_obj.email }}</p>
+        </div>
+        <a href="{% url 'accounts:user_list' %}" class="btn btn-secondary">
+            <i data-feather="arrow-left" class="w-4 h-4"></i>
+            {% trans "Back to List" %}
+        </a>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-lg font-semibold text-ink">{% trans "User Information" %}</h2>
+            </div>
+            <div class="card-body">
+                {{ form|crispy }}
+            </div>
+        </div>
+        
+        <!-- Submit -->
+        <div class="flex space-x-3 justify-end">
+            <a href="{% url 'accounts:user_list' %}" class="btn btn-secondary">
+                <i data-feather="x" class="w-4 h-4"></i>
+                {% trans "Cancel" %}
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-feather="save" class="w-4 h-4"></i>
+                {% trans "Save Changes" %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
