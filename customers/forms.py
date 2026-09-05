@@ -109,7 +109,7 @@ class CustomerForm(forms.ModelForm):
         return company_name
     
     def clean_trade_license_number(self):
-        trade_license = self.cleaned_data.get('trade_license_number', '').strip()
+        trade_license = (self.cleaned_data.get('trade_license_number') or '').strip()
         if trade_license:
             qs = Customer.objects.filter(trade_license_number__iexact=trade_license)
             if self.instance.pk:
@@ -119,7 +119,7 @@ class CustomerForm(forms.ModelForm):
         return trade_license or None
 
     def clean_trn(self):
-        trn = self.cleaned_data.get('trn', '').strip()
+        trn = (self.cleaned_data.get('trn') or '').strip()
         if trn:
             qs = Customer.objects.filter(trn__iexact=trn)
             if self.instance.pk:

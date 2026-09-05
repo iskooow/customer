@@ -189,7 +189,44 @@ class TestCustomerViews(TestCase):
         response = self.client.post(reverse('customers:add'), data)
         self.assertEqual(response.status_code, 302)  # Redirect after success
         self.assertTrue(Customer.objects.filter(company_name='New Company LLC').exists())
-    
+
+    def test_add_customer_without_trn_or_trade_license(self):
+        """Empty optional TRN/trade license fields must not crash the form.
+
+        Regression for AttributeError: 'NoneType' object has no attribute
+        'strip' in CustomerForm.clean_trn / clean_trade_license_number when a
+        blank nullable CharField yields None in cleaned_data.
+        """
+        self.client.login(email='admin@example.com', password='admin123')
+        data = {
+            'company_name': 'No Trn Company LLC',
+            'trade_license_number': '',
+            'trn': '',
+            'sales_person': self.sales_person.pk,
+            'customer_status': 'active',
+        }
+        response = self.client.post(reverse('customers:add'), data)
+        self.assertEqual(response.status_code, 302)  # Redirect after success
+        customer = Customer.objects.get(company_name='No Trn Company LLC')
+        self.assertIsNone(customer.trn)
+        self.assertIsNone(customer.trade_license_number)
+
+    def test_add_customer_whitespace_trn_stored_as_null(self):
+        """A whitespace-only TRN is stripped to empty and stored as NULL."""
+        self.client.login(email='admin@example.com', password='admin123')
+        data = {
+            'company_name': 'Whitespace Trn Company LLC',
+            'trade_license_number': '   ',
+            'trn': '   ',
+            'sales_person': self.sales_person.pk,
+            'customer_status': 'active',
+        }
+        response = self.client.post(reverse('customers:add'), data)
+        self.assertEqual(response.status_code, 302)
+        customer = Customer.objects.get(company_name='Whitespace Trn Company LLC')
+        self.assertIsNone(customer.trn)
+        self.assertIsNone(customer.trade_license_number)
+
     def test_add_customer_sales_person(self):
         self.client.login(email='sales@example.com', password='sales123')
         response = self.client.get(reverse('customers:add'))
