@@ -913,7 +913,7 @@
                         <span class="nav-label">{% trans "Reports" %}</span>
                     </a>
 
-                    <a href="{% url 'customers:import' %}" title="{% trans 'Import / Export' %}" aria-label="{% trans 'Import / Export' %}" class="sidebar-link {% if request.resolver_match.url_name == 'import' or request.resolver_match.url_name == 'import_preview' %}active{% endif %}" {% if request.resolver_match.url_name == 'import' or request.resolver_match.url_name == 'import_preview' %}aria-current="page"{% endif %}>
+                    <a href="{% url 'customers:import' %}" title="{% trans 'Import / Export' %}" aria-label="{% trans 'Import / Export' %}" class="sidebar-link {% if request.resolver_match.url_name == 'import' or request.resolver_match.url_name == 'import_preview' or request.resolver_match.url_name == 'import_status' %}active{% endif %}" {% if request.resolver_match.url_name == 'import' or request.resolver_match.url_name == 'import_preview' or request.resolver_match.url_name == 'import_status' %}aria-current="page"{% endif %}>
                         <i data-feather="upload-cloud" class="nav-icon"></i>
                         <span class="nav-label">{% trans "Import / Export" %}</span>
                     </a>

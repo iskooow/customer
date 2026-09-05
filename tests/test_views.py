@@ -1514,6 +1514,34 @@ class TestCustomerExcelImport(TestCase):
         )
         return self.client.post(reverse('customers:import'), {'excel_file': upload})
 
+    def _confirm_import(self):
+        """Confirm the preview, follow the redirect to the status page, and
+        poll the chunked importer until it reports done.
+
+        The confirm request is intentionally fast: it only starts a pending
+        job. The actual customer creation happens on the status page via
+        chunked POST polls.
+        """
+        confirm = self.client.post(
+            reverse('customers:import_preview'), {'confirm': '1'},
+        )
+        self.assertEqual(confirm.status_code, 302)
+        self.assertEqual(confirm.url, reverse('customers:import_status'))
+
+        status_page = self.client.get(reverse('customers:import_status'))
+        self.assertEqual(status_page.status_code, 200)
+        self.assertContains(status_page, 'progress-track')
+
+        result = {}
+        for _ in range(100):  # safe upper bound for the poll loop
+            resp = self.client.post(reverse('customers:import_status'))
+            self.assertEqual(resp.status_code, 200)
+            result = resp.json()
+            if result.get('done'):
+                break
+        self.assertTrue(result.get('done'), 'import never finished polling')
+        return result
+
     def test_upload_preview_and_confirm_import(self):
         """Regression: string dates must parse, preview shows rows, confirm creates customers.
         Previously 'date.strptime' did not exist, so valid_rows was always empty."""
@@ -1536,12 +1564,10 @@ class TestCustomerExcelImport(TestCase):
         self.assertContains(preview, 'Import Co B LLC')
         self.assertContains(preview, 'Import 2 Records')
 
-        # Confirm the import
-        confirm = self.client.post(
-            reverse('customers:import_preview'), {'confirm': '1'},
-        )
-        self.assertEqual(confirm.status_code, 302)
-        self.assertEqual(confirm.url, reverse('customers:list'))
+        # Confirm the import -- starts the pending job, then status polls it
+        result = self._confirm_import()
+        self.assertEqual(result['done'], True)
+        self.assertIn('count', result)
 
         customer = Customer.objects.get(company_name='Import Co A LLC')
         self.assertEqual(customer.trade_license_expiry, date(2026, 12, 31))
@@ -1574,7 +1600,7 @@ class TestCustomerExcelImport(TestCase):
         self.assertContains(preview, 'Import Co C LLC')
         self.assertContains(preview, '2026-12-31')
 
-        self.client.post(reverse('customers:import_preview'), {'confirm': '1'})
+        self._confirm_import()
         customer = Customer.objects.get(company_name='Import Co C LLC')
         self.assertEqual(customer.trade_license_expiry, date(2026, 12, 31))
         self.assertEqual(customer.passport_expiry, date(2026, 6, 30))
@@ -1615,7 +1641,7 @@ class TestCustomerExcelImport(TestCase):
         self.assertContains(preview, 'Fresh Co LLC')
         self.assertContains(preview, 'Duplicate company name')
 
-        self.client.post(reverse('customers:import_preview'), {'confirm': '1'})
+        self._confirm_import()
         # Only the fresh company is created; the existing one is untouched.
         self.assertEqual(
             Customer.objects.filter(company_name='Fresh Co LLC').count(), 1
@@ -1623,3 +1649,62 @@ class TestCustomerExcelImport(TestCase):
         self.assertEqual(
             Customer.objects.filter(company_name='Existing Co LLC').count(), 1
         )
+    def test_chunked_import_progress_polls(self):
+        """Chunked import: the pending job is processed over several polls and
+        intermediate responses report processed/total before done=True."""
+        self.client.login(email='admin@example.com', password='admin123')
+        rows = []
+        for i in range(60):  # > CHUNK_SIZE (25), forces multiple polls
+            rows.append([
+                i + 1, 'Chunk Co {:02d} LLC'.format(i + 1), 'TL-CH{:02d}'.format(i + 1),
+                '2026-12-31', 'PP-CH{:02d}'.format(i + 1), '2026-06-30',
+                'EID-CH{:02d}'.format(i + 1), '2026-09-30', 'TRN-CH{:02d}'.format(i + 1),
+                'Import Sales',
+            ])
+        resp = self._upload(self._make_xlsx(rows))
+        self.assertEqual(resp.status_code, 302)
+
+        self.client.post(reverse('customers:import_preview'), {'confirm': '1'})
+
+        seen_partial = False
+        total = None
+        for _ in range(100):
+            data = self.client.post(reverse('customers:import_status')).json()
+            if data.get('done'):
+                break
+            seen_partial = True
+            total = data.get('total')
+            self.assertLessEqual(data['processed'], data['total'])
+        self.assertTrue(seen_partial, 'expected at least one partial poll response')
+        self.assertEqual(total, 60)
+        self.assertEqual(Customer.objects.filter(company_name__startswith='Chunk Co').count(), 60)
+
+    def test_cancel_import_aborts_pending_job(self):
+        """Cancel returns done=True and creates no customers."""
+        self.client.login(email='admin@example.com', password='admin123')
+        xlsx = self._make_xlsx([
+            [1, 'Cancelled Co LLC', 'TL-CAN1', '2026-12-31',
+             'PP-CAN1', '2026-06-30', 'EID-CAN1', '2026-09-30', 'TRN-CAN1', ''],
+        ])
+        resp = self._upload(xlsx)
+        self.assertEqual(resp.status_code, 302)
+
+        self.client.post(reverse('customers:import_preview'), {'confirm': '1'})
+
+        resp = self.client.post(reverse('customers:import_status'), {'cancel': '1'})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['done'])
+        self.assertEqual(data['redirect'], reverse('customers:import'))
+        self.assertFalse(Customer.objects.filter(company_name='Cancelled Co LLC').exists())
+
+    def test_status_without_pending_job(self):
+        """Status page/API must be safe when no pending import exists."""
+        self.client.login(email='admin@example.com', password='admin123')
+        page = self.client.get(reverse('customers:import_status'))
+        self.assertEqual(page.status_code, 302)
+        self.assertEqual(page.url, reverse('customers:import'))
+
+        data = self.client.post(reverse('customers:import_status')).json()
+        self.assertTrue(data['done'])
+        self.assertEqual(data['redirect'], reverse('customers:import'))

@@ -605,7 +605,7 @@ class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):
 
 
 class CustomerImportPreviewView(LoginRequiredMixin, UserPassesTestMixin, View):
-    """Show import preview and confirm import."""
+    """Show the import preview and start the chunked import."""
     
     def test_func(self):
         return self.request.user.is_admin_user
@@ -623,54 +623,123 @@ class CustomerImportPreviewView(LoginRequiredMixin, UserPassesTestMixin, View):
             messages.error(request, _('No import preview found.'))
             return redirect('customers:import')
         
-        if 'confirm' in request.POST:
-            return self.confirm_import(request, preview)
-        else:
+        if 'confirm' not in request.POST:
             return redirect('customers:import')
+        
+        # Start the import: move the validated rows into a pending job the
+        # status page processes in chunks. This keeps the confirm request
+        # instant and shows the user real progress on the status page.
+        request.session['import_pending'] = {
+            'index': 0,
+            'created': 0,
+            'valid_rows': preview.get('valid_rows', []),
+            'errors': preview.get('errors', []),
+            'duplicates': preview.get('duplicates', 0),
+        }
+        del request.session['import_preview']
+        request.session.modified = True
+        return redirect('customers:import_status')
+
+
+class CustomerImportStatusView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """Import customers from the pending job in chunks and report progress."""
+
+    #: Rows imported per polling request.
+    CHUNK_SIZE = 25
     
-    def confirm_import(self, request, preview):
-        created_count = 0
-        for row_data in preview['valid_rows']:
+    def test_func(self):
+        return self.request.user.is_admin_user
+    
+    def get(self, request):
+        pending = request.session.get('import_pending')
+        if not pending:
+            messages.error(request, _('No import in progress. Please upload a file first.'))
+            return redirect('customers:import')
+        return render(request, 'customers/import_status.html', {
+            'total': len(pending['valid_rows']),
+            'processed': pending['index'],
+        })
+    
+    def post(self, request):
+        pending = request.session.get('import_pending')
+        if not pending:
+            return JsonResponse({'done': True, 'redirect': reverse('customers:import')})
+        if 'cancel' in request.POST:
+            self.clear_pending(request)
+            messages.info(request, _('Import cancelled.'))
+            return JsonResponse({'done': True, 'redirect': reverse('customers:import')})
+        
+        rows = pending['valid_rows']
+        total = len(rows)
+        start = pending['index']
+        if start < total:
+            end = min(start + self.CHUNK_SIZE, total)
+            chunk_created, chunk_errors = self.import_rows(request, rows[start:end])
+            pending['index'] = end
+            pending['created'] += chunk_created
+            pending['errors'].extend(chunk_errors)
+            request.session.modified = True
+        
+        if pending['index'] >= total:
+            created = pending.get('created', 0)
+            errors = pending.get('errors', [])
+            duplicates = pending.get('duplicates', 0)
+            self.clear_pending(request)
+            messages.success(request, _('Successfully imported {} customers.').format(created))
+            if errors:
+                messages.warning(request, _('{} rows had errors and were skipped.').format(len(errors)))
+            if duplicates:
+                messages.warning(request, _('{} duplicate rows were skipped.').format(duplicates))
+            return JsonResponse({
+                'done': True,
+                'count': created,
+                'redirect': reverse('customers:list'),
+            })
+        
+        return JsonResponse({
+            'done': False,
+            'processed': pending['index'],
+            'total': total,
+        })
+    def import_rows(self, request, rows):
+        """Create customers for one chunk of rows. Returns (created, errors)."""
+        pk_set = {r['sales_person_pk'] for r in rows if r.get('sales_person_pk')}
+        sales_persons = {sp.pk: sp for sp in SalesPerson.objects.filter(pk__in=pk_set)}
+        created = 0
+        errors = []
+        for row_data in rows:
             try:
-                # Rebuild values from the JSON-safe data stored in the session
-                data = {
-                    'company_name': row_data['company_name'],
-                    'trade_license_number': row_data.get('trade_license_number') or None,
-                    'trade_license_expiry': date.fromisoformat(row_data['trade_license_expiry']) if row_data.get('trade_license_expiry') else None,
-                    'passport_number': row_data.get('passport_number') or '',
-                    'passport_expiry': date.fromisoformat(row_data['passport_expiry']) if row_data.get('passport_expiry') else None,
-                    'eid_number': row_data.get('eid_number') or '',
-                    'eid_expiry': date.fromisoformat(row_data['eid_expiry']) if row_data.get('eid_expiry') else None,
-                    'trn': row_data.get('trn') or None,
-                    'sales_person': SalesPerson.objects.filter(pk=row_data.get('sales_person_pk')).first() if row_data.get('sales_person_pk') else None,
-                    'customer_status': row_data.get('customer_status', Customer.CustomerStatus.ACTIVE),
-                    'created_by': request.user,
-                    'updated_by': request.user,
-                }
-                customer = Customer.objects.create(**data)
+                customer = Customer.objects.create(
+                    company_name=row_data['company_name'],
+                    trade_license_number=row_data.get('trade_license_number') or None,
+                    trade_license_expiry=date.fromisoformat(row_data['trade_license_expiry']) if row_data.get('trade_license_expiry') else None,
+                    passport_number=row_data.get('passport_number') or '',
+                    passport_expiry=date.fromisoformat(row_data['passport_expiry']) if row_data.get('passport_expiry') else None,
+                    eid_number=row_data.get('eid_number') or '',
+                    eid_expiry=date.fromisoformat(row_data['eid_expiry']) if row_data.get('eid_expiry') else None,
+                    trn=row_data.get('trn') or None,
+                    sales_person=sales_persons.get(row_data.get('sales_person_pk')),
+                    customer_status=row_data.get('customer_status', Customer.CustomerStatus.ACTIVE),
+                    created_by=request.user,
+                    updated_by=request.user,
+                )
                 customer.update_copy_status()
                 log_action(
                     user=request.user,
                     action='imported',
                     customer=customer,
-                    description=f'Imported customer: {customer.company_name}',
+                    description='Imported customer: {}'.format(customer.company_name),
                     request=request,
                 )
-                created_count += 1
+                created += 1
             except Exception as e:
-                messages.error(request, _('Error importing {}: {}').format(row_data['company_name'], str(e)))
-        
-        # Clear session
-        del request.session['import_preview']
-        
-        messages.success(request, _('Successfully imported {} customers.').format(created_count))
-        if preview['errors']:
-            messages.warning(request, _('{} rows had errors and were skipped.').format(len(preview['errors'])))
-        if preview['duplicates']:
-            messages.warning(request, _('{} duplicate rows were skipped.').format(preview['duplicates']))
-        
-        return redirect('customers:list')
-
+                errors.append('Import error for {}: {}'.format(row_data['company_name'], str(e)))
+        return created, errors
+    
+    def clear_pending(self, request):
+        if 'import_pending' in request.session:
+            del request.session['import_pending']
+            request.session.modified = True
 
 class CustomerPrintView(LoginRequiredMixin, CustomerAccessMixin, DetailView):
     """Print-friendly customer view."""
