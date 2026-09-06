@@ -509,6 +509,73 @@ class TestSalesPersonViews(TestCase):
         self.assertContains(response, 'Inactive Person')
         self.assertNotContains(response, 'Active Person')
 
+    def test_salesperson_detail_delete_button_visible_no_customers(self):
+        """The Delete button must be visible on the detail page when the sales
+        person has no assigned customers (previously hidden because
+        customer_count was never set on the instance)."""
+        self.client.login(email='admin@example.com', password='admin123')
+        response = self.client.get(reverse('salespersons:detail', kwargs={'pk': self.sales_person.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse('salespersons:delete', kwargs={'pk': self.sales_person.pk}),
+        )
+
+    def test_salesperson_detail_delete_button_hidden_with_customers(self):
+        """The Delete button must be hidden on the detail page when the sales
+        person still has assigned customers."""
+        Customer.objects.create(
+            company_name='ACME LLC',
+            sales_person=self.sales_person,
+            created_by=self.admin_user,
+            updated_by=self.admin_user,
+        )
+        self.client.login(email='admin@example.com', password='admin123')
+        response = self.client.get(reverse('salespersons:detail', kwargs={'pk': self.sales_person.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(
+            response,
+            reverse('salespersons:delete', kwargs={'pk': self.sales_person.pk}),
+        )
+
+    def test_salesperson_delete_success_no_customers(self):
+        """A sales person with no customers can be deleted via POST."""
+        self.client.login(email='admin@example.com', password='admin123')
+        response = self.client.post(
+            reverse('salespersons:delete', kwargs={'pk': self.sales_person.pk}),
+        )
+        self.assertRedirects(response, reverse('salespersons:list'))
+        self.assertFalse(SalesPerson.objects.filter(pk=self.sales_person.pk).exists())
+
+    def test_salesperson_delete_blocked_with_customers(self):
+        """Deleting a sales person who still has customers must be blocked."""
+        customer = Customer.objects.create(
+            company_name='ACME LLC',
+            sales_person=self.sales_person,
+            created_by=self.admin_user,
+            updated_by=self.admin_user,
+        )
+        self.client.login(email='admin@example.com', password='admin123')
+        response = self.client.post(
+            reverse('salespersons:delete', kwargs={'pk': self.sales_person.pk}),
+        )
+        self.assertRedirects(
+            response,
+            reverse('salespersons:detail', kwargs={'pk': self.sales_person.pk}),
+        )
+        self.assertTrue(SalesPerson.objects.filter(pk=self.sales_person.pk).exists())
+        customer.refresh_from_db()
+        self.assertEqual(customer.sales_person, self.sales_person)
+
+    def test_salesperson_confirm_delete_page(self):
+        """The confirmation page renders for a deletable sales person."""
+        self.client.login(email='admin@example.com', password='admin123')
+        response = self.client.get(
+            reverse('salespersons:delete', kwargs={'pk': self.sales_person.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Delete Sales Person')
+
 
 
 @pytest.mark.django_db

@@ -97,7 +97,11 @@ class SalesPersonDetailView(LoginRequiredMixin, DetailView):
         context['expiring_soon'] = salesperson.get_expiring_soon_count(30)
         context['missing_docs'] = salesperson.get_missing_documents_count()
         context['pending_cheques'] = salesperson.get_pending_cheques_count()
-        
+
+        # Expose customer_count on the instance so the detail template's
+        # {% if salesperson.customer_count == 0 %} condition works correctly.
+        salesperson.customer_count = context['total_customers']
+
         return context
 
 
@@ -146,24 +150,23 @@ class SalesPersonDeleteView(LoginRequiredMixin, SalesPersonAccessMixin, DeleteVi
     template_name = 'salespersons/confirm_delete.html'
     success_url = reverse_lazy('salespersons:list')
     
-    def delete(self, request, *args, **kwargs):
-        salesperson = self.get_object()
-        
+    def form_valid(self, form):
+        salesperson = self.object
         # Check if sales person has customers
         if salesperson.customers.exists():
-            messages.error(request, _('Cannot delete sales person with assigned customers. Reassign customers first.'))
+            messages.error(self.request, _('Cannot delete sales person with assigned customers. Reassign customers first.'))
             return redirect('salespersons:detail', pk=salesperson.pk)
         
         name = salesperson.name
         log_action(
-            user=request.user,
+            user=self.request.user,
             action='salesperson_deleted',
             customer=None,
             description=f'Deleted sales person: {name}',
-            request=request,
+            request=self.request,
         )
-        messages.success(request, _('Sales person deleted successfully.'))
-        return super().delete(request, *args, **kwargs)
+        messages.success(self.request, _('Sales person deleted successfully.'))
+        return super().form_valid(form)
 
 
 class SalesPersonToggleActiveView(LoginRequiredMixin, SalesPersonAccessMixin, View):
