@@ -3,42 +3,147 @@ Excel report generation utilities.
 """
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, numbers
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
 
 
-class ExcelReportGenerator:
-    """Generate Excel reports for customer records."""
-    
-    def __init__(self, title='Customer Report'):
+def _sanitize_filename_component(name):
+    """Sanitize a name for safe use inside a Windows filename.
+
+    Removes characters that are illegal on Windows: / \\ : * ? " < > |.
+    """
+    invalid_chars = '/\\:*?"<>|'
+    for ch in invalid_chars:
+        name = name.replace(ch, '_')
+    return name.strip().replace(' ', '_')
+
+
+class KBRemiconReport:
+    """Shared builder for KB Remicon branded Excel reports."""
+
+    NAVY = '1F2937'
+    WHITE = 'FFFFFF'
+    DARK_TEXT = '111827'
+    GRAY_TEXT = '6B7280'
+    BORDER_COLOR = 'D1D5DB'
+    ALT_ROW_FILL = 'F3F4F6'
+
+    STATUS_FILLS = {
+        'complete': 'DCFCE7',
+        'partial': 'FEF3C7',
+        'missing': 'FEE2E2',
+        'received': 'DCFCE7',
+        'not_received': 'F3F4F6',
+        'pending': 'FEF3C7',
+        'returned': 'FEE2E2',
+    }
+    STATUS_FONT_COLORS = {
+        'complete': '166534',
+        'partial': '92400E',
+        'missing': '991B1B',
+        'received': '166534',
+        'not_received': '374151',
+        'pending': '92400E',
+        'returned': '991B1B',
+    }
+
+    def __init__(self, title, num_cols=10):
         self.wb = Workbook()
         self.ws = self.wb.active
-        self.ws.title = 'Report'
-        self.title = title
-        self.current_row = 1
-        
-        # Styles
-        self.header_font = Font(bold=True, color='FFFFFF', size=11)
-        self.header_fill = PatternFill(start_color='1F2937', end_color='1F2937', fill_type='solid')
-        self.header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        self.title_font = Font(bold=True, size=14, color='1F2937')
-        self.subtitle_font = Font(size=10, color='6B7280')
-        self.data_font = Font(size=10)
-        self.data_alignment = Alignment(vertical='center', wrap_text=True)
-        self.thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin'),
+        self.ws.title = title[:31]
+        self.num_cols = num_cols
+        self.last_col = get_column_letter(num_cols)
+        self.row = 1
+        self._header_row = None
+        self._data_count = 0
+
+        self._thin_side = Side(style='thin', color=self.BORDER_COLOR)
+        self._thin_border = Border(
+            left=self._thin_side, right=self._thin_side,
+            top=self._thin_side, bottom=self._thin_side,
         )
-        self.currency_format = '#,##0.00'
-        self.date_format = 'YYYY-MM-DD'
-        self.header_row = None
-    
+        self._navy_fill = PatternFill(
+            start_color=self.NAVY, end_color=self.NAVY, fill_type='solid',
+        )
+        self._white_fill = PatternFill(
+            start_color=self.WHITE, end_color=self.WHITE, fill_type='solid',
+        )
+        self._gray_fill = PatternFill(
+            start_color=self.ALT_ROW_FILL, end_color=self.ALT_ROW_FILL,
+            fill_type='solid',
+        )
+
+    def add_header_block(self, title, subtitle=None, report_type=None,
+                         generated_by=None):
+        """Write the branded KB Remicon header block."""
+        nc = self.num_cols
+        center_end = min(10, nc)
+
+        self.ws.merge_cells('A1:C1')
+        self.ws.merge_cells('A2:C2')
+        brand = self.ws.cell(row=1, column=1, value='KB REMICON')
+        brand.font = Font(name='Calibri', size=16, bold=True, color=self.NAVY)
+        brand.alignment = Alignment(horizontal='left', vertical='center')
+        label = self.ws.cell(row=2, column=1, value=report_type or 'REPORT')
+        label.font = Font(name='Calibri', size=11, bold=True, color=self.GRAY_TEXT)
+        label.alignment = Alignment(horizontal='left', vertical='center')
+
+        ce_letter = get_column_letter(center_end)
+        self.ws.merge_cells('E1:{0}1'.format(ce_letter))
+        self.ws.merge_cells('E2:{0}2'.format(ce_letter))
+        title_cell = self.ws.cell(row=1, column=5, value=title)
+        title_cell.font = Font(name='Calibri', size=14, bold=True, color=self.NAVY)
+        title_cell.alignment = Alignment(horizontal='center', vertical='center')
+        sub_cell = self.ws.cell(row=2, column=5, value=report_type or 'REPORT')
+        sub_cell.font = Font(name='Calibri', size=10, color=self.GRAY_TEXT)
+        sub_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+        if subtitle:
+            self.ws.merge_cells('E3:{0}3'.format(ce_letter))
+            sub3 = self.ws.cell(row=3, column=5, value=subtitle)
+            sub3.font = Font(name='Calibri', size=10, color=self.DARK_TEXT)
+            sub3.alignment = Alignment(horizontal='center', vertical='center')
+
+        if nc >= 12:
+            meta_start = 12
+            ml = get_column_letter(meta_start)
+            mr = get_column_letter(nc)
+            self.ws.merge_cells('{0}1:{1}1'.format(ml, mr))
+            self.ws.merge_cells('{0}2:{1}2'.format(ml, mr))
+            self.ws.merge_cells('{0}3:{1}3'.format(ml, mr))
+            rt_cell = self.ws.cell(
+                row=1, column=meta_start,
+                value='Report Type    : {0}'.format(report_type),
+            )
+            rt_cell.font = Font(name='Calibri', size=10, bold=True, color=self.DARK_TEXT)
+            rt_cell.alignment = Alignment(horizontal='left', vertical='center')
+            if generated_by:
+                gb_cell = self.ws.cell(
+                    row=2, column=meta_start,
+                    value='Generated By    : {0}'.format(generated_by),
+                )
+                gb_cell.font = Font(name='Calibri', size=10, color=self.DARK_TEXT)
+                gb_cell.alignment = Alignment(horizontal='left', vertical='center')
+            go_cell = self.ws.cell(
+                row=3, column=meta_start,
+                value='Generated On    : {0}'.format(
+                    timezone.now().strftime('%d %b %Y %H:%M')
+                ),
+            )
+            go_cell.font = Font(name='Calibri', size=10, color=self.DARK_TEXT)
+            go_cell.alignment = Alignment(horizontal='left', vertical='center')
+
+        self.row = 4
+        for col in range(1, nc + 1):
+            self.ws.cell(row=self.row, column=col).border = Border(
+                top=Side(style='medium', color=self.NAVY),
+                bottom=Side(style='medium', color=self.NAVY),
+            )
+        self.row += 1
+
     def _coerce(self, value):
         """Coerce a value to a type openpyxl can bind to a cell.
 
@@ -51,140 +156,168 @@ class ExcelReportGenerator:
             return value
         if isinstance(value, (datetime, date, time, timedelta)):
             return value
-        # Lazy translation proxies / other string-like objects.
         return str(value)
-    
-    def add_title(self, title=None, subtitle=None):
-        """Add report title and subtitle."""
-        title = title or self.title
-        self.ws.merge_cells(start_row=self.current_row, start_column=1, end_row=self.current_row, end_column=15)
-        cell = self.ws.cell(row=self.current_row, column=1, value=title)
-        cell.font = self.title_font
-        cell.alignment = Alignment(horizontal='center', vertical='center')
-        self.current_row += 1
-        
-        if subtitle:
-            self.ws.merge_cells(start_row=self.current_row, start_column=1, end_row=self.current_row, end_column=15)
-            cell = self.ws.cell(row=self.current_row, column=1, value=subtitle)
-            cell.font = self.subtitle_font
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            self.current_row += 1
-        
-        # Generation info
-        gen_info = _('Generated: {}').format(timezone.now().strftime('%d %b %Y %H:%M'))
-        self.ws.merge_cells(start_row=self.current_row, start_column=1, end_row=self.current_row, end_column=15)
-        cell = self.ws.cell(row=self.current_row, column=1, value=gen_info)
-        cell.font = self.subtitle_font
-        cell.alignment = Alignment(horizontal='center', vertical='center')
-        self.current_row += 2
-    
-    def add_summary(self, summary_data):
-        """Add summary statistics section."""
-        self.ws.merge_cells(start_row=self.current_row, start_column=1, end_row=self.current_row, end_column=15)
-        # _('Summary') is a lazy translation proxy; openpyxl can only bind plain
-        # values, so coerce it (and any lazy labels/values) to a real string
-        # with str() before writing to the cell.
-        cell = self.ws.cell(row=self.current_row, column=1, value=str(_('Summary')))
-        cell.font = Font(bold=True, size=12, color='1F2937')
-        self.current_row += 1
-        
-        for label, value in summary_data.items():
-            self.ws.cell(row=self.current_row, column=1, value=str(label)).font = Font(bold=True, size=10)
-            self.ws.cell(row=self.current_row, column=2, value=self._coerce(value)).font = self.data_font
-            self.current_row += 1
-        
-        self.current_row += 1
-    
-    def add_headers(self, headers):
-        """Add column headers."""
-        for col, header in enumerate(headers, 1):
-            cell = self.ws.cell(row=self.current_row, column=col, value=header)
-            cell.font = self.header_font
-            cell.fill = self.header_fill
-            cell.alignment = self.header_alignment
-            cell.border = self.thin_border
-        self.header_row = self.current_row
-        self.current_row += 1
-    
-    def add_row(self, data, row_style=None):
-        """Add a data row."""
-        for col, value in enumerate(data, 1):
-            cell = self.ws.cell(row=self.current_row, column=col, value=value)
-            cell.font = self.data_font
-            cell.alignment = self.data_alignment
-            cell.border = self.thin_border
-            
-            # Format dates
-            if isinstance(value, date):
-                cell.number_format = self.date_format
-            
-            # Apply custom row style if provided
-            if row_style:
-                for key, val in row_style.items():
-                    setattr(cell, key, val)
-        
-        self.current_row += 1
-    
-    def set_column_widths(self, widths):
-        """Set column widths."""
-        for i, width in enumerate(widths, 1):
-            self.ws.column_dimensions[get_column_letter(i)].width = width
-    
-    def freeze_header(self):
-        """Freeze the header row.
 
-        Freeze everything up to and including the column header row (title,
-        summary and headers) so the header stays visible while scrolling data.
-        """
-        # The row one below the header (the first data row) is the freeze
-        # anchor; rows above it remain pinned. Fall back to the current row if
-        # no headers were written.
-        row = (self.header_row + 1) if self.header_row else self.current_row
-        self.ws.freeze_panes = f'A{row}'
-    
-    def add_auto_filter(self, num_cols, num_rows):
-        """Add auto filter to headers."""
-        self.ws.auto_filter.ref = f'A1:{get_column_letter(num_cols)}{num_rows}'
-    
-    def set_print_options(self):
-        """Set print options for the worksheet."""
-        self.ws.sheet_properties.pageSetUpPr = None
+    def add_summary(self, pairs):
+        """Write a summary section from a list of (label, value) pairs."""
+        self.ws.merge_cells(
+            start_row=self.row, start_column=1,
+            end_row=self.row, end_column=self.num_cols,
+        )
+        hdr = self.ws.cell(row=self.row, column=1, value='SUMMARY')
+        hdr.font = Font(name='Calibri', size=11, bold=True, color=self.NAVY)
+        hdr.alignment = Alignment(horizontal='left', vertical='center')
+        hdr.fill = PatternFill(
+            start_color=self.ALT_ROW_FILL, end_color=self.ALT_ROW_FILL,
+            fill_type='solid',
+        )
+        self.row += 1
+
+        for label, value in pairs:
+            self.ws.merge_cells(
+                start_row=self.row, start_column=1,
+                end_row=self.row, end_column=2,
+            )
+            lc = self.ws.cell(row=self.row, column=1, value=label)
+            lc.font = Font(name='Calibri', size=10, bold=True, color=self.DARK_TEXT)
+            lc.alignment = Alignment(horizontal='left', vertical='center')
+
+            end_c = min(6, self.num_cols)
+            self.ws.merge_cells(
+                start_row=self.row, start_column=3,
+                end_row=self.row, end_column=end_c,
+            )
+            vc = self.ws.cell(row=self.row, column=3, value=str(value))
+            vc.font = Font(name='Calibri', size=10, color=self.DARK_TEXT)
+            vc.alignment = Alignment(horizontal='left', vertical='center')
+            self.row += 1
+
+        self.row += 1  # spacer before table
+
+    def add_table_headers(self, headers):
+        """Write navy-styled column headers and record the header row."""
+        self._header_row = self.row
+        for col, header in enumerate(headers, 1):
+            cell = self.ws.cell(row=self.row, column=col, value=header)
+            cell.font = Font(name='Calibri', size=10, bold=True, color=self.WHITE)
+            cell.fill = self._navy_fill
+            cell.alignment = Alignment(
+                horizontal='center', vertical='center', wrap_text=True,
+            )
+            cell.border = self._thin_border
+        self.ws.row_dimensions[self.row].height = 36
+        self.row += 1
+
+    def add_data_row(self, values, row_index=1, status_col=None,
+                     status_value=None):
+        """Write a styled data row with alternating background."""
+        is_odd = (row_index % 2 == 1)
+        base_font = Font(name='Calibri', size=10, color=self.DARK_TEXT)
+
+        for col, value in enumerate(values, 1):
+            cell = self.ws.cell(
+                row=self.row, column=col, value=self._coerce(value),
+            )
+            cell.border = self._thin_border
+            cell.fill = self._white_fill if is_odd else self._gray_fill
+            cell.font = base_font
+
+            if col == 1:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            else:
+                cell.alignment = Alignment(horizontal='left', vertical='center')
+
+            if isinstance(value, (date, datetime)):
+                cell.number_format = 'YYYY-MM-DD'
+
+            if status_col is not None and col == status_col and status_value:
+                sv = status_value.lower().replace(' ', '_')
+                fill_hex = self.STATUS_FILLS.get(sv)
+                if fill_hex:
+                    cell.fill = PatternFill(
+                        start_color=fill_hex, end_color=fill_hex,
+                        fill_type='solid',
+                    )
+                font_hex = self.STATUS_FONT_COLORS.get(sv)
+                if font_hex:
+                    cell.font = Font(
+                        name='Calibri', size=10, color=font_hex, bold=True,
+                    )
+
+        self.ws.row_dimensions[self.row].height = 20
+        self.row += 1
+        self._data_count += 1
+
+    def set_column_widths(self, widths):
+        for idx, width in enumerate(widths, 1):
+            self.ws.column_dimensions[get_column_letter(idx)].width = width
+
+    def add_footer(self, notes=None):
+        """Write optional notes and the branded KB Remicon footer line."""
+        self.row += 1  # spacer
+        if notes:
+            for note in notes:
+                end_c = min(10, self.num_cols)
+                self.ws.merge_cells(
+                    start_row=self.row, start_column=1,
+                    end_row=self.row, end_column=end_c,
+                )
+                nc = self.ws.cell(row=self.row, column=1, value=note)
+                nc.font = Font(name='Calibri', size=9, color=self.GRAY_TEXT)
+                nc.alignment = Alignment(horizontal='left', vertical='center')
+                self.row += 1
+            self.row += 1
+        for col in range(1, self.num_cols + 1):
+            self.ws.cell(row=self.row, column=col).border = Border(
+                top=Side(style='thin', color=self.BORDER_COLOR),
+            )
+        self.row += 1
+        self.ws.merge_cells(
+            start_row=self.row, start_column=1,
+            end_row=self.row, end_column=self.num_cols,
+        )
+        footer = self.ws.cell(
+            row=self.row, column=1,
+            value='KB Remicon Customer Record System',
+        )
+        footer.font = Font(name='Calibri', size=10, italic=True, color=self.GRAY_TEXT)
+        footer.alignment = Alignment(horizontal='center', vertical='center')
+        self.ws.row_dimensions[self.row].height = 24
+
+    def setup_autofilter_freeze_print(self):
+        hr = self._header_row
+        dc = self._data_count
+        if dc > 0:
+            self.ws.auto_filter.ref = 'A{0}:{1}{2}'.format(hr, self.last_col, hr + dc)
+        else:
+            self.ws.auto_filter.ref = 'A{0}:{1}{2}'.format(hr, self.last_col, hr)
+        self.ws.freeze_panes = 'A{0}'.format(hr + 1)
         self.ws.page_setup.orientation = 'landscape'
+        self.ws.page_setup.paperSize = self.ws.PAPERSIZE_A4
         self.ws.page_setup.fitToWidth = 1
         self.ws.page_setup.fitToHeight = 0
-        self.ws.print_title_rows = '1:1'  # Repeat header row
+        self.ws.print_title_rows = '{0}:{0}'.format(hr)
         self.ws.page_margins.left = 0.25
         self.ws.page_margins.right = 0.25
         self.ws.page_margins.top = 0.5
         self.ws.page_margins.bottom = 0.5
-    
-    def get_response(self, filename=None):
-        """Get HTTP response with the Excel file."""
-        if not filename:
-            filename = f'{self.title.lower().replace(" ", "_")}_{date.today()}.xlsx'
-        
+        self.ws.page_margins.header = 0.3
+        self.ws.page_margins.footer = 0.3
+
+    def get_response(self, filename):
         output = BytesIO()
         self.wb.save(output)
         output.seek(0)
-        
         from django.http import HttpResponse
         response = HttpResponse(
             output.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            content_type=(
+                'application/vnd.openxmlformats-officedocument'
+                '.spreadsheetml.sheet'
+            ),
         )
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Disposition'] = 'attachment; filename="{0}"'.format(filename)
         return response
-
-
-def _sanitize_filename_component(name):
-    """Sanitize a name for safe use inside a Windows filename.
-
-    Removes characters that are illegal on Windows: / \\ : * ? " < > |.
-    """
-    invalid_chars = '/\\:*?"<>|'
-    for ch in invalid_chars:
-        name = name.replace(ch, '_')
-    return name.strip().replace(' ', '_')
 
 
 def generate_customer_excel_report(queryset, title='Customer Compliance Report', filters=None, user=None, sales_person=None):
@@ -635,29 +768,31 @@ def _build_compliance_workbook(queryset, title, filters, user, sales_person=None
 
 
 def generate_expiring_documents_excel(queryset, doc_type, days_threshold, title=None):
-    """Generate expiring documents Excel report."""
-    from customers.utils import get_days_left
-    
+    """Generate expiring documents Excel report with KB Remicon branding."""
     if not title:
         title = f'{doc_type.replace("_", " ").title()} Expiring in {days_threshold} Days'
-    
-    generator = ExcelReportGenerator(title)
-    generator.add_title(title)
-    
-    summary = {
-        'Document Type': doc_type.replace('_', ' ').title(),
-        'Threshold': f'{days_threshold} Days',
-        'Total Records': queryset.count(),
-        'Generated': timezone.now().strftime('%d %b %Y %H:%M'),
-    }
-    generator.add_summary(summary)
-    
+
+    doc_type_label = doc_type.replace('_', ' ').title()
+    num_cols = 8
     headers = [
         'S.N', 'Company Name', 'Document Number', 'Expiry Date', 'Days Left',
         'Status', 'Sales Person', 'Copy Available'
     ]
-    generator.add_headers(headers)
-    
+
+    report = KBRemiconReport(title, num_cols=num_cols)
+    report.add_header_block(
+        title,
+        subtitle=f'{doc_type_label}  |  Threshold: {days_threshold} Days',
+        report_type='Document Expiry Report',
+    )
+    report.add_summary([
+        ('Document Type', doc_type_label),
+        ('Threshold', f'{days_threshold} Days'),
+        ('Total Records', str(queryset.count())),
+        ('Generated', timezone.now().strftime('%d %b %Y %H:%M')),
+    ])
+    report.add_table_headers(headers)
+
     for i, customer in enumerate(queryset, 1):
         if doc_type == 'trade_license':
             doc_num = customer.trade_license_number
@@ -679,50 +814,63 @@ def generate_expiring_documents_excel(queryset, doc_type, days_threshold, title=
             copy = customer.documents.filter(document_type='emirates_id').exists()
         else:
             continue
-        
-        generator.add_row([
-            i,
-            customer.company_name,
-            doc_num,
-            expiry,
-            days if days is not None else '',
-            status['label'] if status else '',
-            customer.sales_person.name if customer.sales_person else '',
-            'Yes' if copy else 'No',
-        ])
-    
-    generator.set_column_widths([6, 30, 25, 15, 12, 15, 20, 15])
-    generator.freeze_header()
-    generator.add_auto_filter(len(headers), queryset.count() + 1)
-    generator.set_print_options()
-    
-    return generator.get_response()
+
+        status_label = status['label'] if status else ''
+        report.add_data_row(
+            [
+                i,
+                customer.company_name,
+                doc_num,
+                expiry,
+                days if days is not None else '',
+                status_label,
+                customer.sales_person.name if customer.sales_person else '',
+                'Yes' if copy else 'No',
+            ],
+            row_index=i,
+            status_col=6,
+            status_value=status_label.lower().replace(' ', '_') if status_label else None,
+        )
+
+    report.set_column_widths([6, 30, 25, 15, 12, 15, 20, 15])
+    report.add_footer(notes=[
+        '* Days Left is calculated from today’s date relative to the document expiry.',
+        '* Copy Available indicates whether a scanned copy of the document is on file.',
+    ])
+    report.setup_autofilter_freeze_print()
+    safe_name = _sanitize_filename_component(doc_type_label)
+    return report.get_response(
+        f'KB_Remicon_{safe_name}_Expiring_Report_{date.today()}.xlsx'
+    )
 
 
 def generate_missing_documents_excel(queryset, title='Missing Documents Report'):
-    """Generate missing documents Excel report."""
-    generator = ExcelReportGenerator(title)
-    generator.add_title(title)
-    
-    summary = {
-        'Total Customers': queryset.count(),
-        'Generated': timezone.now().strftime('%d %b %Y %H:%M'),
-    }
-    generator.add_summary(summary)
-    
+    """Generate missing documents Excel report with KB Remicon branding."""
+    num_cols = 9
     headers = [
         'S.N', 'Company Name', 'Missing Documents', 'Trade License', 'Passport', 'EID',
         'TRN Certificate', 'Copy Status', 'Sales Person'
     ]
-    generator.add_headers(headers)
-    
+
+    report = KBRemiconReport(title, num_cols=num_cols)
+    report.add_header_block(
+        title,
+        subtitle=f'Total Customers: {queryset.count()}',
+        report_type='Missing Documents Report',
+    )
+    report.add_summary([
+        ('Total Customers', str(queryset.count())),
+        ('Generated', timezone.now().strftime('%d %b %Y %H:%M')),
+    ])
+    report.add_table_headers(headers)
+
     for i, customer in enumerate(queryset, 1):
         missing = []
         has_tl = customer.documents.filter(document_type='trade_license').exists()
         has_pp = customer.documents.filter(document_type='passport').exists()
         has_eid = customer.documents.filter(document_type='emirates_id').exists()
         has_trn = customer.documents.filter(document_type='trn_certificate').exists()
-        
+
         if not has_tl:
             missing.append('Trade License')
         if not has_pp:
@@ -731,103 +879,132 @@ def generate_missing_documents_excel(queryset, title='Missing Documents Report')
             missing.append('EID')
         if not has_trn:
             missing.append('TRN Certificate')
-        
-        generator.add_row([
-            i,
-            customer.company_name,
-            ', '.join(missing) if missing else 'None',
-            'Yes' if has_tl else 'No',
-            'Yes' if has_pp else 'No',
-            'Yes' if has_eid else 'No',
-            'Yes' if has_trn else 'No',
-            customer.get_copy_status_display(),
-            customer.sales_person.name if customer.sales_person else '',
-        ])
-    
-    generator.set_column_widths([6, 30, 30, 15, 15, 15, 15, 15, 20])
-    generator.freeze_header()
-    generator.add_auto_filter(len(headers), queryset.count() + 1)
-    generator.set_print_options()
-    
-    return generator.get_response()
+
+        copy_status = customer.get_copy_status_display()
+        report.add_data_row(
+            [
+                i,
+                customer.company_name,
+                ', '.join(missing) if missing else 'None',
+                'Yes' if has_tl else 'No',
+                'Yes' if has_pp else 'No',
+                'Yes' if has_eid else 'No',
+                'Yes' if has_trn else 'No',
+                copy_status,
+                customer.sales_person.name if customer.sales_person else '',
+            ],
+            row_index=i,
+            status_col=8,
+            status_value=copy_status,
+        )
+
+    report.set_column_widths([6, 30, 30, 15, 15, 15, 15, 15, 20])
+    report.add_footer(notes=[
+        '* Documents without a scanned copy on file are marked No.',
+        '* Copy Status reflects the overall post-document compliance state.',
+    ])
+    report.setup_autofilter_freeze_print()
+    return report.get_response(
+        f'KB_Remicon_Missing_Documents_Report_{date.today()}.xlsx'
+    )
 
 
 def generate_salesperson_excel(queryset, title='Salesperson Report'):
-    """Generate salesperson performance Excel report."""
-    generator = ExcelReportGenerator(title)
-    generator.add_title(title)
-    
-    summary = {
-        'Total Salespersons': queryset.count(),
-        'Generated': timezone.now().strftime('%d %b %Y %H:%M'),
-    }
-    generator.add_summary(summary)
-    
+    """Generate salesperson performance Excel report with KB Remicon branding."""
+    num_cols = 10
     headers = [
         'S.N', 'Sales Person', 'Email', 'Phone', 'Active', 'Total Customers',
         'Expired Docs', 'Expiring (30d)', 'Missing Docs', 'Pending Cheques'
     ]
-    generator.add_headers(headers)
-    
+
+    report = KBRemiconReport(title, num_cols=num_cols)
+    report.add_header_block(
+        title,
+        subtitle=f'Total Salespersons: {queryset.count()}',
+        report_type='Salesperson Report',
+    )
+    report.add_summary([
+        ('Total Salespersons', str(queryset.count())),
+        ('Generated', timezone.now().strftime('%d %b %Y %H:%M')),
+    ])
+    report.add_table_headers(headers)
     for i, sp in enumerate(queryset, 1):
-        generator.add_row([
-            i,
-            sp.name,
-            sp.email,
-            sp.phone,
-            'Yes' if sp.active else 'No',
-            sp.get_customer_count(),
-            sp.get_expired_documents_count(),
-            sp.get_expiring_soon_count(30),
-            sp.get_missing_documents_count(),
-            sp.get_pending_cheques_count(),
-        ])
-    
-    generator.set_column_widths([6, 25, 30, 20, 10, 15, 12, 15, 12, 15])
-    generator.freeze_header()
-    generator.add_auto_filter(len(headers), queryset.count() + 1)
-    generator.set_print_options()
-    
-    return generator.get_response()
+        report.add_data_row(
+            [
+                i,
+                sp.name,
+                sp.email,
+                sp.phone,
+                'Yes' if sp.active else 'No',
+                sp.get_customer_count(),
+                sp.get_expired_documents_count(),
+                sp.get_expiring_soon_count(30),
+                sp.get_missing_documents_count(),
+                sp.get_pending_cheques_count(),
+            ],
+            row_index=i,
+        )
+
+    report.set_column_widths([6, 25, 30, 20, 10, 15, 12, 15, 12, 15])
+    report.add_footer(notes=[
+        '* Expired Docs counts customers with at least one expired document.',
+        '* Missing Docs counts customers with one or more required documents missing.',
+    ])
+    report.setup_autofilter_freeze_print()
+    return report.get_response(
+        f'KB_Remicon_Salesperson_Performance_Report_{date.today()}.xlsx'
+    )
 
 
 def generate_security_cheque_excel(queryset, title='Security Cheque Report'):
-    """Generate security cheque Excel report."""
-    generator = ExcelReportGenerator(title)
-    generator.add_title(title)
-    
-    summary = {
-        'Total Cheques': queryset.count(),
-        'Received': queryset.filter(status='received').count(),
-        'Pending': queryset.filter(status='pending').count(),
-        'Not Received': queryset.filter(status='not_received').count(),
-        'Returned': queryset.filter(status='returned').count(),
-        'Generated': timezone.now().strftime('%d %b %Y %H:%M'),
-    }
-    generator.add_summary(summary)
-    
+    """Generate security cheque Excel report with KB Remicon branding."""
+    num_cols = 9
     headers = [
         'S.N', 'Company Name', 'Status', 'Cheque Number', 'Amount', 'Cheque Date',
         'Has Copy', 'Sales Person', 'Created At'
     ]
-    generator.add_headers(headers)
-    
+
+    report = KBRemiconReport(title, num_cols=num_cols)
+    report.add_header_block(
+        title,
+        subtitle=f'Total Cheques: {queryset.count()}',
+        report_type='Security Cheque Report',
+    )
+    report.add_summary([
+        ('Total Cheques', str(queryset.count())),
+        ('Received', str(queryset.filter(status='received').count())),
+        ('Pending', str(queryset.filter(status='pending').count())),
+        ('Not Received', str(queryset.filter(status='not_received').count())),
+        ('Returned', str(queryset.filter(status='returned').count())),
+        ('Generated', timezone.now().strftime('%d %b %Y %H:%M')),
+    ])
+    report.add_table_headers(headers)
+
     for i, cheque in enumerate(queryset, 1):
-        generator.add_row([
-            i,
-            cheque.customer.company_name,
-            cheque.get_status_display(),
-            cheque.cheque_number,
-            float(cheque.amount) if cheque.amount else '',
-            cheque.cheque_date,
-            'Yes' if cheque.file else 'No',
-            cheque.customer.sales_person.name if cheque.customer.sales_person else '',
-            cheque.created_at.strftime('%Y-%m-%d %H:%M'),
-        ])
-    
-    generator.set_column_widths([6, 30, 15, 20, 15, 15, 12, 20, 20])
-    generator.freeze_header()
-    generator.add_auto_filter(len(headers), queryset.count() + 1)
-    generator.set_print_options()
-    
-    return generator.get_response()
+        status = cheque.get_status_display()
+        report.add_data_row(
+            [
+                i,
+                cheque.customer.company_name,
+                status,
+                cheque.cheque_number,
+                float(cheque.amount) if cheque.amount else '',
+                cheque.cheque_date,
+                'Yes' if cheque.file else 'No',
+                cheque.customer.sales_person.name if cheque.customer.sales_person else '',
+                cheque.created_at.strftime('%Y-%m-%d %H:%M'),
+            ],
+            row_index=i,
+            status_col=3,
+            status_value=status,
+        )
+
+    report.set_column_widths([6, 30, 15, 20, 15, 15, 12, 20, 20])
+    report.add_footer(notes=[
+        '* Amount is shown in AED (UAE Dirham).',
+        '* Has Copy indicates whether the scanned cheque image is on file.',
+    ])
+    report.setup_autofilter_freeze_print()
+    return report.get_response(
+        f'KB_Remicon_Security_Cheque_Report_{date.today()}.xlsx'
+    )

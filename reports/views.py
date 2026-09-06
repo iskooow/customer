@@ -254,8 +254,6 @@ class ExpiredDocumentsReportView(LoginRequiredMixin, ReportAccessMixin, View):
             title = _('Expired Emirates IDs')
         else:
             # All expired
-            from django.db.models import Q
-            from datetime import date
             today = date.today()
             queryset = queryset.filter(
                 Q(trade_license_expiry__lt=today) |
@@ -338,7 +336,6 @@ class ExpiringDocumentsReportView(LoginRequiredMixin, ReportAccessMixin, View):
             title = _('Emirates IDs Expiring in {} Days').format(days)
         else:
             # All documents expiring within days
-            from datetime import date, timedelta
             today = date.today()
             threshold = today + timedelta(days=days)
             queryset = queryset.filter(

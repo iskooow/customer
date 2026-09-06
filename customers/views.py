@@ -348,86 +348,64 @@ class CustomerExportView(LoginRequiredMixin, View):
         return response
     
     def export_excel(self, queryset):
-        from openpyxl import Workbook
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-        from openpyxl.utils import get_column_letter
-        
-        wb = Workbook()
-        ws = wb.active
-        ws.title = 'Customers'
-        
-        # Header style
-        header_font = Font(bold=True, color='FFFFFF')
-        header_fill = PatternFill(start_color='1F2937', end_color='1F2937', fill_type='solid')
-        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin'),
-        )
-        
+        from reports.excel_reports import KBRemiconReport
+
+        num_cols = 15
         headers = [
-            'S.N', 'Company Name', 'Trade License', 'Trade License Expiry', 'Trade License Days Left',
-            'Passport', 'Passport Expiry', 'Passport Days Left',
-            'EID', 'EID Expiry', 'EID Days Left',
+            'S.N', 'Company Name', 'Trade License', 'Trade License Expiry',
+            'Trade License Days Left', 'Passport', 'Passport Expiry',
+            'Passport Days Left', 'EID', 'EID Expiry', 'EID Days Left',
             'Copy Status', 'TRN', 'Security Cheque', 'Sales Person'
         ]
-        
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
-        
-        # Data rows
+
+        report = KBRemiconReport('Customer List Export', num_cols=num_cols)
+        report.add_header_block(
+            'Customer List Export',
+            subtitle=f'Total Customers: {queryset.count()}',
+            report_type='Customer Record',
+        )
+        report.add_summary([
+            ('Total Customers', str(queryset.count())),
+            ('Generated', date.today().strftime('%d %b %Y')),
+        ])
+        report.add_table_headers(headers)
+
         for i, customer in enumerate(queryset, 1):
             cheque = customer.security_cheques.first()
-            row_data = [
-                i,
-                customer.company_name,
-                customer.trade_license_number,
-                customer.trade_license_expiry,
-                customer.get_trade_license_days_left(),
-                customer.passport_number,
-                customer.passport_expiry,
-                customer.get_passport_days_left(),
-                customer.eid_number,
-                customer.eid_expiry,
-                customer.get_eid_days_left(),
-                customer.get_copy_status_display(),
-                customer.trn,
-                cheque.get_status_display() if cheque else 'Not Received',
-                customer.sales_person.name if customer.sales_person else '',
-            ]
-            
-            for col, value in enumerate(row_data, 1):
-                cell = ws.cell(row=i+1, column=col, value=value)
-                cell.border = thin_border
-                cell.alignment = Alignment(vertical='center', wrap_text=True)
-                
-                # Format date cells
-                if col in [4, 6, 8, 10] and value:
-                    cell.number_format = 'YYYY-MM-DD'
-        
-        # Auto-fit columns
-        for col in range(1, len(headers) + 1):
-            ws.column_dimensions[get_column_letter(col)].width = 20
-        
-        # Freeze header row
-        ws.freeze_panes = 'A2'
-        
-        # Auto-filter
-        ws.auto_filter.ref = f'A1:{get_column_letter(len(headers))}{queryset.count() + 1}'
-        
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            cheque_status = cheque.get_status_display() if cheque else 'Not Received'
+            copy_status = customer.get_copy_status_display()
+            report.add_data_row(
+                [
+                    i,
+                    customer.company_name,
+                    customer.trade_license_number or '',
+                    customer.trade_license_expiry,
+                    customer.get_trade_license_days_left(),
+                    customer.passport_number or '',
+                    customer.passport_expiry,
+                    customer.get_passport_days_left(),
+                    customer.eid_number or '',
+                    customer.eid_expiry,
+                    customer.get_eid_days_left(),
+                    copy_status,
+                    customer.trn or '',
+                    cheque_status,
+                    customer.sales_person.name if customer.sales_person else '',
+                ],
+                row_index=i,
+                status_col=12,
+                status_value=copy_status,
+            )
+
+        report.set_column_widths([
+            6, 28, 16, 15, 15, 16, 15, 15, 16, 13, 13, 14, 16, 16, 20
+        ])
+        report.add_footer()
+        report.setup_autofilter_freeze_print()
+
+        return report.get_response(
+            f'customers_{date.today()}.xlsx'
         )
-        response['Content-Disposition'] = f'attachment; filename="customers_{date.today()}.xlsx"'
-        
-        wb.save(response)
-        return response
 
 
 class CustomerImportView(LoginRequiredMixin, UserPassesTestMixin, View):

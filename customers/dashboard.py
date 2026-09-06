@@ -75,22 +75,15 @@ def get_dashboard_data(user):
     ).count()
     valid_documents = documents.filter(expiry_date__gt=end_7).count()
 
-    # ---- Document-level status for the donut chart -------------------------
-    # Documents without an expiry_date fall into a dedicated bucket so every
-    # document appears in exactly one slice and the donut totals are correct.
-    documents_without_expiry = documents.filter(expiry_date__isnull=True).count()
-
     # ---- Missing documents (customers missing at least one required doc) --
-    # This is a customer-level metric used in KPI cards and alerts — NOT the
-    # donut chart.  Kept separately so both views (per-document and per-
-    # customer) are available to the template.
     missing_documents = customers.filter(
         ~Q(copy_status=Customer.CopyStatus.COMPLETE)
     ).count()
 
     # ---- Donut chart data --------------------------------------------------
-    # All four slices are document counts; they sum to donut_total.
-    donut_total = total_documents
+    # Three slices are document counts (valid / expiring / expired).
+    # The fourth slice is the customer-level missing-documents metric so the
+    # overview surfaces the most actionable information.
     donut_data = [
         {
             'label': 'Valid Documents',
@@ -108,11 +101,12 @@ def get_dashboard_data(user):
             'color': DONUT_COLORS['expired'],
         },
         {
-            'label': 'No Expiry Set',
-            'count': documents_without_expiry,
+            'label': 'Missing Documents',
+            'count': missing_documents,
             'color': DONUT_COLORS['missing'],
         },
     ]
+    donut_total = sum(item['count'] for item in donut_data)
     for item in donut_data:
         item['percent'] = round(
             (item['count'] / donut_total * 100) if donut_total else 0,
