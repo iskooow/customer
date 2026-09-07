@@ -68,11 +68,23 @@ def get_dashboard_data(user):
         ) else 0
 
     # ---- Document expiry status (from the Document model) ----------------
-    expired_documents = documents.filter(expiry_date__lt=today).count()
-    expiring_7_days = documents.filter(
+    # TRN Certificate never expires — always counted as valid. Exclude it
+    # from the expiry-window queries so it is not double-counted and never
+    # appears as expiring/expired.
+    trn_count = documents.filter(
+        document_type=Document.DocumentType.TRN_CERTIFICATE
+    ).count()
+    expired_documents = documents.exclude(
+        document_type=Document.DocumentType.TRN_CERTIFICATE
+    ).filter(expiry_date__lt=today).count()
+    expiring_7_days = documents.exclude(
+        document_type=Document.DocumentType.TRN_CERTIFICATE
+    ).filter(
         expiry_date__gte=today, expiry_date__lte=end_7
     ).count()
-    valid_documents = documents.filter(expiry_date__gt=end_7).count()
+    valid_documents = documents.exclude(
+        document_type=Document.DocumentType.TRN_CERTIFICATE
+    ).filter(expiry_date__gt=end_7).count() + trn_count
 
     # ---- Missing documents (customers missing at least one required doc) --
     missing_documents = customers.filter(
@@ -80,10 +92,12 @@ def get_dashboard_data(user):
     ).count()
 
     # ---- Donut chart data --------------------------------------------------
-    # Only dated (tracked) documents — the three mutually-exclusive statuses.
-    # "Missing Documents" is a customer-level metric and is already surfaced
-    # as a separate stat card + expiry-alerts row; it does not belong in a
-    # document-status distribution chart.
+    # Documents with an expiry date are bucketed into one of three
+    # mutually-exclusive statuses (Valid / Expiring Soon / Expired).
+    # TRN Certificate is always valid (no expiry) and is folded into the
+    # "Valid Documents" slice.  Documents whose type is not expiry-tracked
+    # (e.g. Security Cheque, Other) and have no expiry date are excluded
+    # from the donut — they are not part of expiry monitoring.
     donut_data = [
         {
             'label': 'Valid Documents',
@@ -198,6 +212,7 @@ def _build_sales_person_summary(customers, user):
     # Expiring (7 days) per sales person
     expiring_counts = dict(
         Document.objects
+        .exclude(document_type=Document.DocumentType.TRN_CERTIFICATE)
         .filter(expiry_date__gte=today, expiry_date__lte=end_7)
         .exclude(customer__sales_person_id__isnull=True)
         .values('customer__sales_person_id')
@@ -208,6 +223,7 @@ def _build_sales_person_summary(customers, user):
     # Expired per sales person
     expired_counts = dict(
         Document.objects
+        .exclude(document_type=Document.DocumentType.TRN_CERTIFICATE)
         .filter(expiry_date__lt=today)
         .exclude(customer__sales_person_id__isnull=True)
         .values('customer__sales_person_id')
