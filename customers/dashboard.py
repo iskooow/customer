@@ -19,7 +19,6 @@ DONUT_COLORS = {
     'valid': '#22c55e',     # green
     'expiring': '#f59e0b',  # orange
     'expired': '#ef4444',   # red
-    'missing': '#9ca3af',   # gray
 }
 
 DOCUMENT_TYPE_LABELS = {
@@ -81,9 +80,10 @@ def get_dashboard_data(user):
     ).count()
 
     # ---- Donut chart data --------------------------------------------------
-    # Three slices are document counts (valid / expiring / expired).
-    # The fourth slice is the customer-level missing-documents metric so the
-    # overview surfaces the most actionable information.
+    # Only dated (tracked) documents — the three mutually-exclusive statuses.
+    # "Missing Documents" is a customer-level metric and is already surfaced
+    # as a separate stat card + expiry-alerts row; it does not belong in a
+    # document-status distribution chart.
     donut_data = [
         {
             'label': 'Valid Documents',
@@ -100,12 +100,9 @@ def get_dashboard_data(user):
             'count': expired_documents,
             'color': DONUT_COLORS['expired'],
         },
-        {
-            'label': 'Missing Documents',
-            'count': missing_documents,
-            'color': DONUT_COLORS['missing'],
-        },
     ]
+    # Denominator = only documents that have an expiry date (tracked docs).
+    # Documents with expiry_date IS NULL are not part of expiry tracking.
     donut_total = sum(item['count'] for item in donut_data)
     for item in donut_data:
         item['percent'] = round(
